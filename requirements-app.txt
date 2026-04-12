@@ -1,0 +1,8 @@
+# Slim deps for Streamlit / Render / similar hosts (install from repo root).
+# Use this as the requirements file in Streamlit Community Cloud → Advanced settings.
+-e .
+streamlit>=1.28,<2
+pandas>=2.0,<3
+numpy>=1.24,<3
+scikit-learn>=1.3,<2
+joblib>=1.3,<2

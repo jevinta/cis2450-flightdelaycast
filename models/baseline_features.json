@@ -1,0 +1,13 @@
+{
+  "numeric": [
+    "dep_hour",
+    "month",
+    "day_of_week",
+    "DISTANCE"
+  ],
+  "categorical": [
+    "OP_CARRIER",
+    "ORIGIN",
+    "DEST"
+  ]
+}

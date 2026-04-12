@@ -23,15 +23,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
-
-
-def feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
-    numeric = ["dep_hour", "month", "day_of_week", "DISTANCE"]
-    for c in ["w_tmax", "w_tmin", "w_prcp", "w_wspd"]:
-        if c in df.columns and df[c].notna().any():
-            numeric.append(c)
-    categorical = ["OP_CARRIER", "ORIGIN", "DEST"]
-    return numeric, categorical
+from flightdelaycast.model_features import feature_columns  # noqa: E402
 
 
 def main() -> None:
@@ -39,6 +31,7 @@ def main() -> None:
     p.add_argument("--data", type=Path, default=PROCESSED_FLIGHTS)
     p.add_argument("--out-model", type=Path, default=MODELS_DIR / "baseline_logistic.joblib")
     p.add_argument("--out-metrics", type=Path, default=MODELS_DIR / "baseline_metrics.json")
+    p.add_argument("--out-features", type=Path, default=MODELS_DIR / "baseline_features.json")
     p.add_argument("--test-size", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=42)
     args = p.parse_args()
@@ -113,10 +106,13 @@ def main() -> None:
     joblib.dump(model, args.out_model)
 
     args.out_metrics.write_text(json.dumps(metrics, indent=2))
+    feat_meta = {"numeric": num_cols, "categorical": cat_cols}
+    args.out_features.write_text(json.dumps(feat_meta, indent=2))
     print(json.dumps(metrics, indent=2))
     print(classification_report(y_test, pred, digits=3))
     print(f"Saved model -> {args.out_model}")
     print(f"Saved metrics -> {args.out_metrics}")
+    print(f"Saved feature schema -> {args.out_features}")
 
 
 if __name__ == "__main__":
