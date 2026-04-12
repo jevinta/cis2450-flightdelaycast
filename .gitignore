@@ -18,6 +18,9 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
+# Matplotlib cache (non-default config dir)
+.mplconfig/
+
 # IDE
 .idea/
 .vscode/

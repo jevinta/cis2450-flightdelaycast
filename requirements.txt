@@ -16,3 +16,9 @@ scikit-learn>=1.3,<2
 # APIs & dashboard
 requests>=2.31,<3
 streamlit>=1.28,<2
+
+# Weather (historical station/daily; no API key)
+meteostat>=1.6,<2
+
+tqdm>=4.66,<5
+joblib>=1.3,<2
