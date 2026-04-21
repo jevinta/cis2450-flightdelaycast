@@ -1,0 +1,11 @@
+ident,type,name,latitude_deg,longitude_deg,iso_country,iata_code
+KJFK,large_airport,John F Kennedy,40.639751,-73.778925,US,JFK
+KLAX,large_airport,Los Angeles Intl,33.942536,-118.408075,US,LAX
+KORD,large_airport,Chicago O Hare,41.978603,-87.904842,US,ORD
+KATL,large_airport,Atlanta,33.636719,-84.427864,US,ATL
+KSFO,large_airport,San Francisco,37.621313,-122.378955,US,SFO
+KDEN,large_airport,Denver,39.856098,-104.673178,US,DEN
+KLAS,large_airport,Las Vegas,36.080056,-115.15225,US,LAS
+KPHX,large_airport,Phoenix,33.434278,-112.011583,US,PHX
+KBOS,large_airport,Boston,42.364347,-71.005181,US,BOS
+KSEA,large_airport,Seattle,47.450249,-122.30888,US,SEA
