@@ -17,9 +17,52 @@ import streamlit as st
 from flightdelaycast.config import DELAY_THRESHOLD_MINUTES, MODELS_DIR, REPORTS_FIGURES
 from flightdelaycast.model_features import prediction_dataframe
 
-MODEL_PATH = MODELS_DIR / "baseline_logistic.joblib"
-FEATURES_PATH = MODELS_DIR / "baseline_features.json"
-METRICS_PATH = MODELS_DIR / "baseline_metrics.json"
+# Trained artifacts (train_baseline.py + train_tree_models.py)
+MODEL_BUNDLES: list[dict[str, str | Path]] = [
+    {
+        "id": "logistic",
+        "label": "Logistic regression (baseline)",
+        "joblib": MODELS_DIR / "baseline_logistic.joblib",
+        "features": MODELS_DIR / "baseline_features.json",
+        "metrics": MODELS_DIR / "baseline_metrics.json",
+    },
+    {
+        "id": "rf",
+        "label": "Random Forest",
+        "joblib": MODELS_DIR / "random_forest.joblib",
+        "features": MODELS_DIR / "random_forest_features.json",
+        "metrics": MODELS_DIR / "random_forest_metrics.json",
+    },
+    {
+        "id": "hgb",
+        "label": "Histogram gradient boosting",
+        "joblib": MODELS_DIR / "hist_gradient_boosting.joblib",
+        "features": MODELS_DIR / "hist_gradient_boosting_features.json",
+        "metrics": MODELS_DIR / "hist_gradient_boosting_metrics.json",
+    },
+]
+
+
+def _bundle_files_ready(b: dict[str, str | Path]) -> bool:
+    return Path(b["joblib"]).is_file() and Path(b["features"]).is_file()
+
+
+def _bundle_by_id(model_id: str) -> dict[str, str | Path]:
+    return next(b for b in MODEL_BUNDLES if b["id"] == model_id)
+
+
+def _default_model_id() -> str:
+    for b in MODEL_BUNDLES:
+        if _bundle_files_ready(b):
+            return str(b["id"])
+    return "logistic"
+
+
+def _classifier_select_label(model_id: str) -> str:
+    b = _bundle_by_id(model_id)
+    base = str(b["label"])
+    return f"{base} ✓" if _bundle_files_ready(b) else f"{base} — not trained yet"
+
 
 # Short captions for EDA PNGs (edit as your story evolves)
 EDA_CAPTIONS: dict[str, str] = {
@@ -33,7 +76,7 @@ SPEAKER_OVERVIEW = """
 - **Hook:** Delays cost passengers and airlines; estimating risk before departure is a practical decision-support problem.
 - **Data:** U.S. BTS domestic flights plus optional daily weather at the origin (Meteostat), merged on airport and date.
 - **Target:** Binary *delayed* if arrival delay is strictly greater than 15 minutes (matches `DELAY_THRESHOLD_MINUTES` in code).
-- **Model (today):** Scikit-learn pipeline with preprocessing and **logistic regression** (`class_weight='balanced'` for imbalance).
+- **Models:** The live demo can switch among **logistic regression**, **Random Forest**, and **histogram gradient boosting** (whatever `.joblib` files you ship under `models/`).
 - **Demo:** Walk through one realistic itinerary, then contrast a peak-hour hub departure vs an off-peak case if time allows.
 """
 
@@ -46,13 +89,15 @@ SPEAKER_DEMO = """
 
 
 @st.cache_resource
-def load_model_bundle():
-    if not MODEL_PATH.is_file() or not FEATURES_PATH.is_file():
-        return None, None, None
-    model = joblib.load(MODEL_PATH)
-    features = json.loads(FEATURES_PATH.read_text())
-    metrics = json.loads(METRICS_PATH.read_text()) if METRICS_PATH.is_file() else {}
-    return model, features, metrics
+def load_trained_bundle(model_id: str):
+    bundle = next(b for b in MODEL_BUNDLES if b["id"] == model_id)
+    if not _bundle_files_ready(bundle):
+        return None, None, None, str(bundle["label"])
+    model = joblib.load(bundle["joblib"])
+    features = json.loads(Path(bundle["features"]).read_text())
+    mp = Path(bundle["metrics"])
+    metrics = json.loads(mp.read_text()) if mp.is_file() else {}
+    return model, features, metrics, str(bundle["label"])
 
 
 def _risk_tone(p: float) -> tuple[str, str]:
@@ -108,8 +153,8 @@ def tab_overview() -> None:
         st.markdown("**Modeling (current app)**")
         st.markdown(
             """
-            - **Preprocessing:** Imputation, scaling for numerics, one-hot encoding for categoricals.
-            - **Classifier:** Logistic regression baseline with **balanced class weights** for skewed *on-time* rates.
+            - **Preprocessing:** Imputation, scaling for numerics, one-hot encoding for categoricals (same feature schema across models).
+            - **Classifiers:** **Logistic regression** (sparse OHE), **Random Forest**, and **histogram gradient boosting** (dense OHE in training scripts). Use the sidebar selector on the demo tab to compare live **P(delayed)** from each trained pipeline.
             """
         )
 
@@ -120,16 +165,30 @@ def tab_overview() -> None:
     st.caption("Tip for your talk: keep this tab visible while you introduce the problem, then switch to **Delay risk demo** for the live walkthrough.")
 
 
-def tab_demo(model, feat_meta, metrics) -> None:
+def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> None:
     if model is None or feat_meta is None:
-        st.warning(
-            "No trained model found in `models/`. Train locally, then commit or upload artifacts for deployment:\n\n"
-            "`python scripts/build_processed.py` → `python scripts/train_baseline.py`\n\n"
-            "You need `baseline_logistic.joblib` and `baseline_features.json` next to each other."
-        )
+        if model_id == "rf":
+            st.warning(
+                "**Random Forest** is not in `models/` yet (need `random_forest.joblib` + `random_forest_features.json`). "
+                "After processed flights exist, run:\n\n`python scripts/train_tree_models.py --model rf`\n\n"
+                "Or train RF and HGB together: `python scripts/train_tree_models.py`"
+            )
+        elif model_id == "hgb":
+            st.warning(
+                "**Histogram gradient boosting** is not in `models/` yet (need `hist_gradient_boosting.joblib` + "
+                "`hist_gradient_boosting_features.json`). After processed flights exist, run:\n\n"
+                "`python scripts/train_tree_models.py --model hgb`\n\n"
+                "Or train both trees: `python scripts/train_tree_models.py`"
+            )
+        else:
+            st.warning(
+                "**Logistic regression** artifacts are missing. Train locally, then commit or upload for deployment:\n\n"
+                "`python scripts/build_processed.py` → `python scripts/train_baseline.py`\n\n"
+                "Expected: `baseline_logistic.joblib` and `baseline_features.json` in `models/`."
+            )
         return
 
-    st.success("Loaded baseline logistic regression pipeline.")
+    st.success(f"Loaded **{model_label}** pipeline.")
     if metrics:
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Holdout F1", f"{metrics.get('f1', 0):.3f}" if isinstance(metrics.get("f1"), (int, float)) else metrics.get("f1", "n/a"))
@@ -231,6 +290,10 @@ def main() -> None:
     )
     _inject_style()
 
+    model_id_key = "fdc_model_id"
+    all_ids = [str(b["id"]) for b in MODEL_BUNDLES]
+    ready_n = sum(1 for b in MODEL_BUNDLES if _bundle_files_ready(b))
+
     with st.sidebar:
         st.header("Flight Delay Cast")
         st.caption("CIS 2450 · delay risk explorer")
@@ -246,18 +309,33 @@ def main() -> None:
             3. **EDA snapshots** — evidence behind features
             """
         )
+        st.divider()
+        st.markdown("**Delay risk demo**")
+        if model_id_key in st.session_state and st.session_state[model_id_key] not in all_ids:
+            del st.session_state[model_id_key]
+        default_ix = all_ids.index(_default_model_id())
+        chosen_id = st.selectbox(
+            "Classifier",
+            options=all_ids,
+            index=default_ix,
+            format_func=_classifier_select_label,
+            key=model_id_key,
+        )
+        st.caption(f"Trained bundles in `models/`: **{ready_n}/{len(MODEL_BUNDLES)}**")
+        if ready_n < len(MODEL_BUNDLES):
+            st.caption("Add trees: `python scripts/train_tree_models.py` (needs processed flight CSV).")
 
     st.title("Flight Delay Cast")
-    st.caption("U.S. domestic flights · BTS + optional origin weather · baseline classifier")
-
-    model, feat_meta, metrics = load_model_bundle()
+    st.caption("U.S. domestic flights · BTS + optional origin weather · pick a classifier in the sidebar")
 
     tab_ov, tab_live, tab_plots = st.tabs(["Overview", "Delay risk demo", "EDA snapshots"])
+
+    model, feat_meta, metrics, label = load_trained_bundle(chosen_id)
 
     with tab_ov:
         tab_overview()
     with tab_live:
-        tab_demo(model, feat_meta, metrics)
+        tab_demo(model, feat_meta, metrics, label, model_id=chosen_id)
     with tab_plots:
         tab_eda()
 
