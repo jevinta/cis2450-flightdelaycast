@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import pandas as pd
 
-WEATHER_NUMERIC = ("w_tmax", "w_tmin", "w_prcp", "w_wspd")
+WEATHER_ORIGIN_NUMERIC = ("w_tmax", "w_tmin", "w_prcp", "w_wspd")
+WEATHER_DEST_NUMERIC = ("dw_tmax", "dw_tmin", "dw_prcp", "dw_wspd")
+# Back-compat alias
+WEATHER_NUMERIC = WEATHER_ORIGIN_NUMERIC
 
 
 def feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     numeric = ["dep_hour", "month", "day_of_week", "DISTANCE"]
-    for c in WEATHER_NUMERIC:
+    for c in WEATHER_ORIGIN_NUMERIC + WEATHER_DEST_NUMERIC:
         if c in df.columns and df[c].notna().any():
             numeric.append(c)
     categorical = ["OP_CARRIER", "ORIGIN", "DEST"]

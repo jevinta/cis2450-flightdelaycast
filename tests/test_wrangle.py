@@ -24,6 +24,8 @@ class TestWrangle(unittest.TestCase):
         merged = merge_airport_coords(clean, FIXTURES / "airports_sample.csv")
         self.assertIn("origin_lat", merged.columns)
         self.assertGreater(merged["origin_lat"].notna().sum(), 0)
+        self.assertIn("dest_lat", merged.columns)
+        self.assertGreater(merged["dest_lat"].notna().sum(), 0)
 
 
 if __name__ == "__main__":

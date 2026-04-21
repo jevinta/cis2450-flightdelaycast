@@ -1,0 +1,102 @@
+[
+  {
+    "feature": "num__dep_hour",
+    "importance": 0.22733329005519584
+  },
+  {
+    "feature": "num__DISTANCE",
+    "importance": 0.09691551324172955
+  },
+  {
+    "feature": "num__day_of_week",
+    "importance": 0.08137489298189057
+  },
+  {
+    "feature": "cat__ORIGIN_ORD",
+    "importance": 0.033679993272719484
+  },
+  {
+    "feature": "num__w_tmax",
+    "importance": 0.029887568155456047
+  },
+  {
+    "feature": "num__w_tmin",
+    "importance": 0.024992130293445304
+  },
+  {
+    "feature": "num__w_wspd",
+    "importance": 0.02382765659636364
+  },
+  {
+    "feature": "num__dw_wspd",
+    "importance": 0.02361275837046598
+  },
+  {
+    "feature": "num__dw_tmax",
+    "importance": 0.021871060663963496
+  },
+  {
+    "feature": "num__dw_tmin",
+    "importance": 0.019537651136767878
+  },
+  {
+    "feature": "cat__ORIGIN_DFW",
+    "importance": 0.01739083941483789
+  },
+  {
+    "feature": "cat__OP_CARRIER_DL",
+    "importance": 0.016836445676734448
+  },
+  {
+    "feature": "cat__OP_CARRIER_WN",
+    "importance": 0.01610580345812857
+  },
+  {
+    "feature": "cat__OP_CARRIER_AA",
+    "importance": 0.016090084517835064
+  },
+  {
+    "feature": "cat__OP_CARRIER_UA",
+    "importance": 0.013831697676952828
+  },
+  {
+    "feature": "num__w_prcp",
+    "importance": 0.013408318502044915
+  },
+  {
+    "feature": "cat__DEST_DFW",
+    "importance": 0.012959537584220237
+  },
+  {
+    "feature": "cat__ORIGIN_infrequent_sklearn",
+    "importance": 0.012561069610359556
+  },
+  {
+    "feature": "cat__DEST_ORD",
+    "importance": 0.010372186561264781
+  },
+  {
+    "feature": "cat__DEST_infrequent_sklearn",
+    "importance": 0.010070771385548
+  },
+  {
+    "feature": "cat__ORIGIN_PHX",
+    "importance": 0.009462219539828615
+  },
+  {
+    "feature": "cat__ORIGIN_MIA",
+    "importance": 0.008657650531185548
+  },
+  {
+    "feature": "cat__OP_CARRIER_AS",
+    "importance": 0.0068574131913920165
+  },
+  {
+    "feature": "cat__DEST_EWR",
+    "importance": 0.006728172082070725
+  },
+  {
+    "feature": "cat__ORIGIN_LAX",
+    "importance": 0.006681491888486477
+  }
+]

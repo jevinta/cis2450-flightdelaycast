@@ -19,11 +19,19 @@ def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
         rename[c] = c2
     out = out.rename(columns=rename)
     lower_map = {c.lower(): c for c in out.columns}
-    # Common BTS aliases
+    # Common BTS aliases (legacy column names + TranStats 2018+ marketing-carrier files)
     aliases = {
         "flightdate": "FL_DATE",
         "reporting_airline": "OP_CARRIER",
         "iata_code_reporting_airline": "OP_CARRIER",
+        "iata_code_marketing_airline": "OP_CARRIER",
+        "origin": "ORIGIN",
+        "dest": "DEST",
+        "crsdeptime": "CRS_DEP_TIME",
+        "arrdelay": "ARR_DELAY",
+        "cancelled": "CANCELLED",
+        "diverted": "DIVERTED",
+        "distance": "DISTANCE",
     }
     for alias, canonical in aliases.items():
         if alias in lower_map and canonical not in out.columns:
@@ -118,10 +126,19 @@ def clean_flights(df: pd.DataFrame) -> pd.DataFrame:
 def merge_airport_coords(flights: pd.DataFrame, airports_path: Path) -> pd.DataFrame:
     ap = pd.read_csv(airports_path, low_memory=False)
     ap = ap[(ap["iso_country"] == "US") & ap["iata_code"].notna() & (ap["iata_code"] != "")]
-    ap = ap.rename(columns={"latitude_deg": "origin_lat", "longitude_deg": "origin_lon"})
-    use = ap[["iata_code", "origin_lat", "origin_lon"]].drop_duplicates("iata_code")
-    out = flights.merge(use, left_on="ORIGIN", right_on="iata_code", how="left")
+    use = ap[["iata_code", "latitude_deg", "longitude_deg"]].drop_duplicates("iata_code")
+    use_origin = use.rename(columns={"latitude_deg": "origin_lat", "longitude_deg": "origin_lon"})
+    out = flights.merge(use_origin, left_on="ORIGIN", right_on="iata_code", how="left")
     out = out.drop(columns=["iata_code"], errors="ignore")
+    use_dest = use.rename(
+        columns={
+            "iata_code": "iata_code_dest",
+            "latitude_deg": "dest_lat",
+            "longitude_deg": "dest_lon",
+        }
+    )
+    out = out.merge(use_dest, left_on="DEST", right_on="iata_code_dest", how="left")
+    out = out.drop(columns=["iata_code_dest"], errors="ignore")
     return out
 
 

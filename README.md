@@ -1,6 +1,6 @@
 # Flight Delay Cast (CIS 2450)
 
-Predict whether a U.S. domestic flight will be **delayed** (arrival delay **> 15 minutes**) using BTS flight data and NOAA weather, with a small Streamlit dashboard.
+Predict whether a U.S. domestic flight will be **delayed** (arrival delay **> 15 minutes**) using BTS flight data and optional **Meteostat** daily weather at origin (`w_*`) and destination (`dw_*`), with a small Streamlit dashboard.
 
 ## Setup
 
@@ -18,6 +18,24 @@ pip install -r requirements.txt
 - `notebooks` — EDA
 - `src/flightdelaycast` — shared Python package (cleaning, config)
 - `dashboard` — Streamlit app (`streamlit run dashboard/app.py`)
+
+## Training pipeline (local)
+
+1. Put BTS CSVs under `data/raw/bts/` (or run `python scripts/download_bts.py --year YYYY --months M ...`).
+2. `python scripts/download_airports.py` → `data/raw/airports.csv`
+3. Build processed flights (add weather flags as needed; Meteostat calls are slow—lower `--weather-max-pairs` while testing):
+
+```bash
+python scripts/build_processed.py
+python scripts/build_processed.py --weather --weather-dest --weather-max-pairs 500
+```
+
+4. Train models:
+
+```bash
+python scripts/train_baseline.py
+python scripts/train_tree_models.py
+```
 
 ## Deploying the dashboard (presentation)
 

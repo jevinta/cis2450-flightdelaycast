@@ -13,6 +13,7 @@ REPORTS_FIGURES = REPORTS_DIR / "figures"
 MODELS_DIR = REPO_ROOT / "models"
 PROCESSED_FLIGHTS = DATA_PROCESSED / "flights_wrangled.csv.gz"
 WEATHER_CACHE = DATA_PROCESSED / "weather_origin_daily.csv.gz"
+WEATHER_DEST_CACHE = DATA_PROCESSED / "weather_destination_daily.csv.gz"
 
 # Proposal: binary target — 1 if arrival delay strictly exceeds this (minutes)
 DELAY_THRESHOLD_MINUTES = 15

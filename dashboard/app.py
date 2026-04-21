@@ -74,7 +74,7 @@ EDA_CAPTIONS: dict[str, str] = {
 
 SPEAKER_OVERVIEW = """
 - **Hook:** Delays cost passengers and airlines; estimating risk before departure is a practical decision-support problem.
-- **Data:** U.S. BTS domestic flights plus optional daily weather at the origin (Meteostat), merged on airport and date.
+- **Data:** U.S. BTS domestic flights plus optional daily **origin** and **destination** weather (Meteostat), merged on airport and date.
 - **Target:** Binary *delayed* if arrival delay is strictly greater than 15 minutes (matches `DELAY_THRESHOLD_MINUTES` in code).
 - **Models:** The live demo can switch among **logistic regression**, **Random Forest**, and **histogram gradient boosting** (whatever `.joblib` files you ship under `models/`).
 - **Demo:** Walk through one realistic itinerary, then contrast a peak-hour hub departure vs an off-peak case if time allows.
@@ -132,7 +132,7 @@ def tab_overview() -> None:
     st.markdown(
         f"""
         **Goal:** Estimate the probability that a U.S. domestic flight will be **delayed**
-        (arrival delay **> {DELAY_THRESHOLD_MINUTES} minutes**), using operational fields and optional origin weather.
+        (arrival delay **> {DELAY_THRESHOLD_MINUTES} minutes**), using operational fields and optional origin / destination weather.
 
         **Why it matters:** Passengers miss connections; airlines absorb crew and gate costs. A transparent risk score
         helps explain *which factors* push risk up or down—not just a black-box label.
@@ -146,7 +146,7 @@ def tab_overview() -> None:
         st.markdown(
             """
             - **BTS** — U.S. Bureau of Transportation Statistics domestic flights (schedules, carriers, delay outcomes).
-            - **Weather** — Daily summaries at the flight **origin** (optional in your processed build).
+            - **Weather** — Daily Meteostat summaries at **origin** (`w_*` columns) and/or **destination** (`dw_*`), optional in your processed build.
             """
         )
     with c2:
@@ -199,7 +199,8 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
 
     num_cols = feat_meta["numeric"]
     cat_cols = feat_meta["categorical"]
-    weather_keys = [c for c in num_cols if c.startswith("w_")]
+    origin_wx = [c for c in num_cols if c.startswith("w_") and not c.startswith("dw_")]
+    dest_wx = [c for c in num_cols if c.startswith("dw_")]
 
     st.markdown("**Scenario inputs**")
     c1, c2, c3 = st.columns(3)
@@ -216,13 +217,24 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
         distance = st.number_input("Distance (miles)", 50.0, 6000.0, 2475.0, 25.0)
 
     weather_vals: dict | None = None
-    if weather_keys:
-        st.markdown("**Optional weather at origin** (leave blank → same median imputation as training)")
-        wc = st.columns(min(len(weather_keys), 4))
+    if origin_wx or dest_wx:
         weather_vals = {}
-        for i, k in enumerate(weather_keys):
+
+    if origin_wx:
+        st.markdown("**Optional weather at origin** (leave blank → median imputation like training)")
+        wc = st.columns(min(len(origin_wx), 4))
+        for i, k in enumerate(origin_wx):
             with wc[i % len(wc)]:
-                raw = st.text_input(k.replace("w_", "").replace("_", " "), "", key=f"w_{k}", help="Numeric; empty skips this field.")
+                raw = st.text_input(k.replace("w_", "").replace("_", " "), "", key=f"wx_{k}", help="Numeric; empty skips this field.")
+                if raw.strip():
+                    weather_vals[k] = float(raw)
+
+    if dest_wx:
+        st.markdown("**Optional weather at destination** (leave blank → median imputation like training)")
+        wc2 = st.columns(min(len(dest_wx), 4))
+        for i, k in enumerate(dest_wx):
+            with wc2[i % len(wc2)]:
+                raw = st.text_input(k.replace("dw_", "").replace("_", " "), "", key=f"wx_{k}", help="Numeric; empty skips this field.")
                 if raw.strip():
                     weather_vals[k] = float(raw)
 
@@ -236,7 +248,7 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
         month=int(month),
         day_of_week=int(dow),
         distance=distance,
-        weather=weather_vals,
+        weather=weather_vals if weather_vals else None,
     )
     proba = float(model.predict_proba(row)[0, 1])
     label, emoji = _risk_tone(proba)
@@ -326,7 +338,7 @@ def main() -> None:
             st.caption("Add trees: `python scripts/train_tree_models.py` (needs processed flight CSV).")
 
     st.title("Flight Delay Cast")
-    st.caption("U.S. domestic flights · BTS + optional origin weather · pick a classifier in the sidebar")
+    st.caption("U.S. domestic flights · BTS + optional origin/destination weather · pick a classifier in the sidebar")
 
     tab_ov, tab_live, tab_plots = st.tabs(["Overview", "Delay risk demo", "EDA snapshots"])
 

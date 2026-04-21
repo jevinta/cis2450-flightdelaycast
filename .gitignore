@@ -18,6 +18,9 @@ data/raw/*
 data/processed/*
 !data/processed/.gitkeep
 
+# Meteostat bulk cache (redirected from ~/.meteostat for portability)
+.cache/
+
 # Matplotlib cache (non-default config dir)
 .mplconfig/
 
