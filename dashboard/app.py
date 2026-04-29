@@ -4,18 +4,32 @@ from __future__ import annotations
 
 import json
 import sys
+from datetime import date, time, timedelta
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
+_DASHBOARD_DIR = Path(__file__).resolve().parent
 if str(_REPO / "src") not in sys.path:
     sys.path.insert(0, str(_REPO / "src"))
+if str(_DASHBOARD_DIR) not in sys.path:
+    sys.path.insert(0, str(_DASHBOARD_DIR))
 
 import joblib
 import pandas as pd
 import streamlit as st
 
-from flightdelaycast.config import DELAY_THRESHOLD_MINUTES, MODELS_DIR, REPORTS_FIGURES
+from flightdelaycast.config import AIRPORTS_CSV, DELAY_THRESHOLD_MINUTES, MODELS_DIR, REPORTS_FIGURES
 from flightdelaycast.model_features import prediction_dataframe
+from flightdelaycast.route_distance import great_circle_miles_between_airports
+
+from manual_weather_numeric import MANUAL_WEATHER_OPTIONS, manual_weather_to_numeric_row
+from prediction_explain import approximate_expected_delay_minutes, build_narrative
+from weather_policy import (
+    SUPPORTED_FORECAST_DAYS,
+    WeatherUIMode,
+    fetch_live_forecast_weather,
+    resolve_weather_ui_mode,
+)
 
 # Trained artifacts (train_baseline.py + train_tree_models.py)
 MODEL_BUNDLES: list[dict[str, str | Path]] = [
@@ -88,10 +102,10 @@ SPEAKER_OVERVIEW = """
 """
 
 SPEAKER_DEMO = """
-- **Inputs:** Explain carrier / route / schedule fields; mention distance as a proxy for stage length and complexity.
-- **Weather:** If columns exist, note they are optional in the UI and imputed like training when omitted.
-- **Output:** Probability is **P(delayed)** on the holdout definition — not the same as “minutes late.”
-- **Caveat:** Emphasize illustrative baseline; performance depends on which months/years you trained on.
+- **Inputs:** Origin/destination + **flight date** + **scheduled departure time**; airline optional; **great-circle distance** is computed from `airports.csv` (run `download_airports.py` if missing).
+- **Weather UX:** Inside the forecast horizon, the app stays in **automatic** mode (see `weather_policy.fetch_live_forecast_weather` for the API hook). Farther out, **manual** scenario weather maps to numeric stand-ins (`manual_weather_numeric.py`).
+- **Output:** Risk band, **P(delayed)**, optional **heuristic delay minutes**, top factors, and a short recommendation.
+- **Caveat:** Illustrative; performance depends on training window and whether weather columns exist in the saved model.
 """
 
 
@@ -208,69 +222,177 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
     cat_cols = feat_meta["categorical"]
     origin_wx = [c for c in num_cols if c.startswith("w_") and not c.startswith("dw_")]
     dest_wx = [c for c in num_cols if c.startswith("dw_")]
+    wx_numeric_cols = origin_wx + dest_wx
 
-    st.markdown("**Scenario inputs**")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        carrier = st.text_input("Carrier (IATA)", value="AA", help="Two-letter IATA code, uppercase.")
-        origin = st.text_input("Origin airport", value="JFK")
-        dest = st.text_input("Destination airport", value="LAX")
-    with c2:
-        dep_hour = st.slider("Scheduled departure (hour)", 0.0, 23.99, 14.5, 0.25)
-        month = st.number_input("Month", 1, 12, 1)
-        _days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        dow = st.selectbox("Day of week", list(range(7)), index=0, format_func=lambda i: _days[i])
-    with c3:
-        distance = st.number_input("Distance (miles)", 50.0, 6000.0, 2475.0, 25.0)
+    today = date.today()
+    max_flight_date = today + timedelta(days=365)
 
-    weather_vals: dict | None = None
-    if origin_wx or dest_wx:
-        weather_vals = {}
+    st.markdown("### Trip")
+    flight_date = st.date_input(
+        "Flight date",
+        value=today,
+        min_value=today,
+        max_value=max_flight_date,
+        help=f"Past dates are disabled. Automatic forecast mode applies through the next {SUPPORTED_FORECAST_DAYS} days.",
+    )
 
-    if origin_wx:
-        st.markdown("**Optional weather at origin** (leave blank → median imputation like training)")
-        wc = st.columns(min(len(origin_wx), 4))
-        for i, k in enumerate(origin_wx):
-            with wc[i % len(wc)]:
-                raw = st.text_input(k.replace("w_", "").replace("_", " "), "", key=f"wx_{k}", help="Numeric; empty skips this field.")
-                if raw.strip():
-                    weather_vals[k] = float(raw)
+    wx_mode = resolve_weather_ui_mode(flight_date, reference_date=today)
+    manual_dep_choice: str | None = None
+    manual_dest_choice: str | None = None
 
-    if dest_wx:
-        st.markdown("**Optional weather at destination** (leave blank → median imputation like training)")
-        wc2 = st.columns(min(len(dest_wx), 4))
-        for i, k in enumerate(dest_wx):
-            with wc2[i % len(wc2)]:
-                raw = st.text_input(k.replace("dw_", "").replace("_", " "), "", key=f"wx_{k}", help="Numeric; empty skips this field.")
-                if raw.strip():
-                    weather_vals[k] = float(raw)
+    if wx_numeric_cols:
+        if wx_mode is WeatherUIMode.AUTOMATIC_FORECAST:
+            st.info("Weather forecast data will be used automatically for this date.")
+            st.caption(
+                "Live forecast values are loaded in `weather_policy.fetch_live_forecast_weather` "
+                "(API not wired yet → numerics are median-imputed like missing training rows)."
+            )
+        else:
+            st.warning(
+                "Weather forecast data is unavailable this far in advance, so please choose expected weather conditions."
+            )
+            _wx_placeholder = "— choose —"
+            manual_dep_choice = st.selectbox(
+                "Departure weather",
+                options=[_wx_placeholder, *MANUAL_WEATHER_OPTIONS],
+                help="Mapped to numeric stand-ins for origin `w_*` columns (see `manual_weather_numeric.py`).",
+            )
+            manual_dest_choice = st.selectbox(
+                "Destination weather",
+                options=[_wx_placeholder, *MANUAL_WEATHER_OPTIONS],
+                help="Mapped to numeric stand-ins for destination `dw_*` columns.",
+            )
+    else:
+        st.caption("This model artifact has **no weather columns**; weather mode UI is skipped.")
 
+    st.markdown("### Itinerary")
+    with st.form("delay_prediction_form", clear_on_submit=False):
+        c1, c2 = st.columns(2)
+        with c1:
+            origin_in = st.text_input("Origin airport (IATA)", value="JFK", help="Three-letter U.S. airport code.")
+            dest_in = st.text_input("Destination airport (IATA)", value="LAX", help="Must differ from origin.")
+        with c2:
+            dep_time = st.time_input(
+                "Scheduled departure time",
+                value=time(14, 30),
+                help="Converted to fractional hour for the model (scheduled, not actual).",
+            )
+            airline_in = st.text_input(
+                "Airline (optional, IATA)",
+                value="",
+                placeholder="e.g. AA",
+                help="Leave blank if unknown; encoded as UNK for the categorical pipeline.",
+            )
+        submitted = st.form_submit_button("Run prediction")
+
+    if not submitted:
+        st.info("Fill in **origin**, **destination**, and **scheduled departure time**, then click **Run prediction**.")
+        st.stop()
+
+    errors: list[str] = []
+    if flight_date < today or flight_date > max_flight_date:
+        errors.append("Flight date must be between today and one year from today.")
+
+    o = origin_in.strip().upper()
+    d = dest_in.strip().upper()
+    if not o or not d:
+        errors.append("Origin and destination are required.")
+    if o == d:
+        errors.append("Origin and destination cannot be the same.")
+
+    carrier = airline_in.strip().upper() or "UNK"
+
+    dep_hour = dep_time.hour + dep_time.minute / 60.0 + dep_time.second / 3600.0
+    month = int(flight_date.month)
+    dow = int(flight_date.weekday())
+
+    distance_mi = great_circle_miles_between_airports(o, d, AIRPORTS_CSV)
+    if distance_mi is None:
+        errors.append(
+            "Could not compute distance (unknown IATA codes or missing `data/raw/airports.csv`). "
+            "Run `python scripts/download_airports.py`."
+        )
+
+    weather_vals: dict[str, float] | None = None
+    if wx_numeric_cols:
+        if wx_mode is WeatherUIMode.AUTOMATIC_FORECAST:
+            fetched = fetch_live_forecast_weather(
+                o,
+                d,
+                flight_date,
+                required_numeric_keys=wx_numeric_cols,
+            )
+            weather_vals = {k: float(v) for k, v in (fetched or {}).items()} if fetched else None
+        else:
+            _ph = "— choose —"
+            if manual_dep_choice in (None, _ph) or manual_dest_choice in (None, _ph):
+                errors.append("Select both departure and destination weather for manual mode.")
+            else:
+                weather_vals = manual_weather_to_numeric_row(
+                    str(manual_dep_choice),
+                    str(manual_dest_choice),
+                    origin_keys=origin_wx,
+                    dest_keys=dest_wx,
+                )
+
+    if errors:
+        for e in errors:
+            st.error(e)
+        st.stop()
+
+    assert distance_mi is not None
     row = prediction_dataframe(
         num_cols=num_cols,
         cat_cols=cat_cols,
         carrier=carrier,
-        origin=origin,
-        dest=dest,
-        dep_hour=dep_hour,
-        month=int(month),
-        day_of_week=int(dow),
-        distance=distance,
-        weather=weather_vals if weather_vals else None,
+        origin=o,
+        dest=d,
+        dep_hour=float(dep_hour),
+        month=month,
+        day_of_week=dow,
+        distance=float(distance_mi),
+        weather=weather_vals,
     )
     proba = float(model.predict_proba(row)[0, 1])
     label, emoji = _risk_tone(proba)
+    approx_min = approximate_expected_delay_minutes(proba)
+    narrative = build_narrative(
+        model,
+        model_id,
+        row,
+        dep_hour=float(dep_hour),
+        month=month,
+        distance_mi=float(distance_mi),
+        origin=o,
+        dest=d,
+        carrier=carrier,
+        flight_date=flight_date,
+        delay_probability=proba,
+        manual_dep_wx=manual_dep_choice if wx_mode is WeatherUIMode.MANUAL_SCENARIO else None,
+        manual_dest_wx=manual_dest_choice if wx_mode is WeatherUIMode.MANUAL_SCENARIO else None,
+    )
 
     st.divider()
-    left, right = st.columns((1, 1.2), gap="large")
+    st.markdown("### Prediction")
+    left, right = st.columns((1, 1.15), gap="large")
     with left:
-        st.markdown(f"### {emoji} {label}")
-        st.metric("Estimated **P(delayed)**", f"{proba:.1%}")
+        st.markdown(f"#### {emoji} {label}")
+        st.metric("Probability of delay ( >15 min )", f"{proba:.1%}")
+        if approx_min is not None:
+            st.metric("Approx. delay if late (heuristic)", f"~{approx_min:.0f} min")
+            st.caption("Heuristic from P(delayed), not a trained regression on minutes.")
+        else:
+            st.caption("Estimated delay minutes: *not shown* for very low delay probability.")
     with right:
         st.caption(f"Risk meter · **{proba:.0%}**")
         st.progress(min(max(proba, 0.0), 1.0))
+        st.markdown("**Top contributing factors**")
+        for line in narrative.factors:
+            st.markdown(f"- {line}")
+        st.markdown("**Recommendation**")
+        st.markdown(narrative.recommendation)
         st.caption(
-            "This is the probability of the **binary delay class**, not predicted minutes late. "
-            "Re-train on your full BTS window (+ weather) for stronger estimates."
+            "P(delayed) is from the trained classifier on historical BTS-style features, not live ATC data."
         )
 
     with st.expander("Speaker notes — Live demo", expanded=False):
