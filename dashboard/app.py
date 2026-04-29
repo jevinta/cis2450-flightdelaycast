@@ -175,7 +175,7 @@ def tab_overview() -> None:
         st.markdown("**Modeling (current app)**")
         st.markdown(
             """
-            - **Preprocessing:** Median imputation, **robust scaling** for numerics (outlier-resistant), one-hot encoding for categoricals, and high-correlation numeric filtering before training.
+            - **Preprocessing:** Median imputation, **robust scaling** for numerics (outlier-resistant), one-hot encoding for categoricals, and high-correlation numeric filtering **using the training split only** (no test leakage).
             - **Classifiers:** **Logistic regression** (sparse OHE), **Random Forest**, and **histogram gradient boosting** (dense OHE in training scripts). Use the sidebar selector on the demo tab to compare live **P(delayed)** from each trained pipeline.
             """
         )
@@ -567,10 +567,14 @@ def tab_methods() -> None:
         """
     )
 
+    log_params = _load_json_safe(MODELS_DIR / "baseline_best_params.json")
     rf_params = _load_json_safe(MODELS_DIR / "random_forest_best_params.json")
     hgb_params = _load_json_safe(MODELS_DIR / "hist_gradient_boosting_best_params.json")
 
-    if rf_params or hgb_params:
+    if log_params or rf_params or hgb_params:
+        if log_params:
+            st.markdown("**Logistic regression (baseline) — best params (C regularization, cv=3, scoring=F1)**")
+            st.json(log_params)
         if rf_params:
             st.markdown("**Random Forest — best params found by RandomizedSearchCV (cv=3, scoring=F1)**")
             st.json(rf_params)
@@ -579,10 +583,13 @@ def tab_methods() -> None:
             st.json(hgb_params)
     else:
         st.info(
-            "Tuning results not yet generated. Run:\n\n"
-            "`python scripts/train_tree_models.py --tune`\n\n"
-            "This executes `RandomizedSearchCV` (n\\_iter=12, cv=3, scoring=F1) over the "
-            "parameter spaces below and saves the best params to `models/*_best_params.json`."
+            "Tuning results not yet generated. By default, training runs **RandomizedSearchCV** "
+            "(F1, cv=3). Run:\n\n"
+            "`python scripts/train_baseline.py`\n\n"
+            "`python scripts/train_tree_models.py`\n\n"
+            "Use `--no-tune` on either script only for a faster dev run. "
+            "Best params are written to `models/baseline_best_params.json` and "
+            "`models/*_best_params.json` for trees."
         )
 
     with st.expander("Parameter spaces searched (RF_PARAM_DIST / HGB_PARAM_DIST)"):
@@ -606,8 +613,9 @@ def tab_methods() -> None:
             })
 
     st.markdown(
-        "**Where in code:** `scripts/train_tree_models.py` — `_tune_pipe()` wraps "
-        "`sklearn.model_selection.RandomizedSearchCV`; invoked via the `--tune` flag."
+        "**Where in code:** `scripts/train_baseline.py` (`_tune_logistic`) and "
+        "`scripts/train_tree_models.py` (`_tune_pipe`) wrap "
+        "`sklearn.model_selection.RandomizedSearchCV` (on by default; pass `--no-tune` to skip)."
     )
 
     # ── Conclusion ────────────────────────────────────────────────────────────────
@@ -639,16 +647,15 @@ def tab_methods() -> None:
             f"Retraining on only those {top_k} features preserved F1 within {delta:.3f} of "
             f"the full-feature model, validating the importance rankings from EDA."
         )
-    if rf_params or hgb_params:
+    if log_params or rf_params or hgb_params:
         parts.append(
             "RandomizedSearchCV identified hyperparameters that refine the bias-variance "
             "tradeoff beyond the initial defaults, with tuning guided by 3-fold cross-validated F1."
         )
     else:
         parts.append(
-            "RandomizedSearchCV is wired into the training script (`--tune` flag) and searches "
-            "the defined parameter spaces using 3-fold CV on F1 — a principled alternative to "
-            "manual tuning that keeps the test set clean throughout."
+            "Training scripts run RandomizedSearchCV by default (3-fold CV on F1). "
+            "Re-run `train_baseline.py` and `train_tree_models.py` to materialize best-parameter JSON."
         )
 
     st.markdown(" ".join(parts))

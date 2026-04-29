@@ -27,7 +27,7 @@ from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
 from flightdelaycast.model_features import feature_columns  # noqa: E402
 
-# Parameter spaces for RandomizedSearchCV (--tune flag).
+# Parameter spaces for RandomizedSearchCV (on by default; use --no-tune to skip).
 # n_estimators, depth, leaf size, and feature-split strategy cover the main
 # bias-variance knobs for RF; learning rate, depth, and regularisation for HGB.
 RF_PARAM_DIST = {
@@ -49,6 +49,7 @@ HGB_PARAM_DIST = {
 def _drop_highly_correlated_numeric(
     df: pd.DataFrame, numeric_cols: list[str], threshold: float = 0.9
 ) -> tuple[list[str], list[str]]:
+    """Correlation matrix is computed on ``df`` only — pass training features after split to avoid leakage."""
     usable = [c for c in numeric_cols if c in df.columns]
     if len(usable) < 2:
         return usable, []
@@ -312,9 +313,9 @@ def main() -> None:
     p.add_argument("--test-size", type=float, default=0.2)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument(
-        "--tune",
+        "--no-tune",
         action="store_true",
-        help="Run RandomizedSearchCV for hyperparameter tuning (slower; saves *_best_params.json).",
+        help="Skip RandomizedSearchCV; train with default hyperparameters (faster).",
     )
     p.add_argument(
         "--tune-iter",
@@ -329,6 +330,7 @@ def main() -> None:
         help="Top-k original features to keep in the feature-selection comparison (RF only).",
     )
     args = p.parse_args()
+    tune = not args.no_tune
 
     if not args.data.exists():
         print(f"Missing processed data: {args.data}", file=sys.stderr)
@@ -337,7 +339,6 @@ def main() -> None:
 
     df = pd.read_csv(args.data, low_memory=False)
     num_cols, cat_cols = feature_columns(df)
-    num_cols, dropped_corr = _drop_highly_correlated_numeric(df, num_cols, threshold=0.9)
     use_cols = num_cols + cat_cols
     miss = [c for c in use_cols if c not in df.columns]
     if miss:
@@ -348,6 +349,11 @@ def main() -> None:
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=args.test_size, random_state=args.seed, stratify=y
     )
+
+    num_cols, dropped_corr = _drop_highly_correlated_numeric(X_train, num_cols, threshold=0.9)
+    use_cols_fit = num_cols + cat_cols
+    X_train = X_train[use_cols_fit]
+    X_test = X_test[use_cols_fit]
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     feat_meta = {"numeric": num_cols, "categorical": cat_cols}
@@ -364,11 +370,16 @@ def main() -> None:
             num_cols,
             cat_cols,
             args.seed,
-            tune=args.tune,
+            tune=tune,
             n_iter=args.tune_iter,
         )
         metrics["corr_drop_threshold"] = 0.9
         metrics["dropped_high_corr_numeric"] = dropped_corr
+        metrics["hyperparameter_tuning"] = (
+            f"RandomizedSearchCV(cv=3, scoring=f1, n_iter={args.tune_iter})"
+            if tune
+            else "none (--no-tune)"
+        )
         stem = args.out_dir / "random_forest"
         joblib.dump(pipe, stem.with_suffix(".joblib"))
         stem.with_name("random_forest_metrics.json").write_text(json.dumps(metrics, indent=2))
@@ -407,11 +418,16 @@ def main() -> None:
             num_cols,
             cat_cols,
             args.seed,
-            tune=args.tune,
+            tune=tune,
             n_iter=args.tune_iter,
         )
         metrics["corr_drop_threshold"] = 0.9
         metrics["dropped_high_corr_numeric"] = dropped_corr
+        metrics["hyperparameter_tuning"] = (
+            f"RandomizedSearchCV(cv=3, scoring=f1, n_iter={args.tune_iter})"
+            if tune
+            else "none (--no-tune)"
+        )
         stem = args.out_dir / "hist_gradient_boosting"
         joblib.dump(pipe, stem.with_name("hist_gradient_boosting.joblib"))
         stem.with_name("hist_gradient_boosting_metrics.json").write_text(json.dumps(metrics, indent=2))
