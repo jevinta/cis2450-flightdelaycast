@@ -102,7 +102,32 @@ def main() -> None:
 
     print(f"Rows: {len(df):,}")
     print(f"Delay rate P(arr_delay > 15 min): {delay_rate:.3f}")
-    summary_lines.append("## 2) Target distribution (class balance)")
+
+    # ── Summary statistics table ──────────────────────────────────────────────
+    stat_cols = [c for c in ["dep_hour", "month", "day_of_week", "DISTANCE", "w_tmax", "w_prcp", "w_wspd"] if c in df.columns]
+    if stat_cols:
+        desc = df[stat_cols].describe().loc[["count", "mean", "std", "min", "25%", "50%", "75%", "max"]]
+        header = "| stat | " + " | ".join(stat_cols) + " |"
+        sep = "|---" + ("|---" * len(stat_cols)) + "|"
+        rows_md = [header, sep]
+        for stat_name, row in desc.iterrows():
+            cells = " | ".join(f"{v:.2f}" for v in row)
+            rows_md.append(f"| {stat_name} | {cells} |")
+        summary_lines.append("## 2) Summary statistics (key numeric features)")
+        summary_lines.extend(rows_md)
+        summary_lines.append("")
+        summary_lines.append(
+            "- `dep_hour`: fractional hour (0–23) parsed from BTS `CRS_DEP_TIME`; spread across the full day."
+        )
+        summary_lines.append(
+            "- `DISTANCE`: right-skewed (short hops dominate; long-haul flights are outliers handled by RobustScaler)."
+        )
+        summary_lines.append(
+            "- Weather columns (`w_*`) have high missing rates — median imputation applied in the model pipeline."
+        )
+        summary_lines.append("")
+
+    summary_lines.append("## 3) Target distribution (class balance)")
     summary_lines.append(
         f"- Delay prevalence: **{_fmt_pct(delay_rate)}** delayed vs **{_fmt_pct(1.0 - delay_rate)}** not delayed."
     )
@@ -152,7 +177,7 @@ def main() -> None:
         if not hour_peak.empty:
             top_h = int(hour_peak.index[0])
             top_h_rate = float(hour_peak.iloc[0])
-            summary_lines.append("## 3) Distribution and pattern checks")
+            summary_lines.append("## 4) Distribution and pattern checks")
             summary_lines.append(
                 f"- Time-of-day effect: highest delay risk appears around hour **{top_h:02d}:00** at **{_fmt_pct(top_h_rate)}**."
             )
@@ -226,7 +251,7 @@ def main() -> None:
 
     if outlier_rows:
         outlier_rows.sort(key=lambda x: x[3], reverse=True)
-        summary_lines.append("## 4) Outlier check and handling rationale")
+        summary_lines.append("## 5) Outlier check and handling rationale")
         summary_lines.append("- Method: IQR rule (`Q1 - 1.5*IQR`, `Q3 + 1.5*IQR`) on key numeric variables.")
         for col, n_out, n_total, frac in outlier_rows:
             summary_lines.append(
@@ -255,7 +280,7 @@ def main() -> None:
         fig.savefig(args.out_dir / "05_outlier_boxplots.png", dpi=150)
         plt.close(fig)
 
-    summary_lines.append("## 5) EDA conclusion")
+    summary_lines.append("## 6) EDA conclusion")
     summary_lines.append(
         "- EDA supports the modeling approach: mixed-feature classification with interpretable risk outputs."
     )
