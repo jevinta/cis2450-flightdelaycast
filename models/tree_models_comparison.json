@@ -1,9 +1,9 @@
 {
   "random_forest": {
-    "accuracy": 0.6033666666666667,
-    "precision": 0.3130726939523519,
-    "recall": 0.5854633728402113,
-    "f1": 0.40798049654211654,
+    "accuracy": 0.7625333333333333,
+    "precision": 0.4917966101694915,
+    "recall": 0.5179208910466943,
+    "f1": 0.5045207956600362,
     "n_train": 120000,
     "n_test": 30000,
     "delay_rate_test": 0.23343333333333333,
@@ -12,10 +12,10 @@
     "hyperparameter_tuning": "RandomizedSearchCV(cv=3, scoring=f1, n_iter=12)"
   },
   "hist_gradient_boosting": {
-    "accuracy": 0.6062666666666666,
-    "precision": 0.31576124434909203,
-    "recall": 0.5884620876767099,
-    "f1": 0.4109903261194774,
+    "accuracy": 0.7277,
+    "precision": 0.43956043956043955,
+    "recall": 0.6054548050835357,
+    "f1": 0.509339900294312,
     "n_train": 120000,
     "n_test": 30000,
     "delay_rate_test": 0.23343333333333333,

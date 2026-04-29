@@ -243,11 +243,7 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
 
     if wx_numeric_cols:
         if wx_mode is WeatherUIMode.AUTOMATIC_FORECAST:
-            st.info("Weather forecast data will be used automatically for this date.")
-            st.caption(
-                "Live forecast values are loaded in `weather_policy.fetch_live_forecast_weather` "
-                "(API not wired yet → numerics are median-imputed like missing training rows)."
-            )
+            st.info(f"Live weather forecast will be fetched automatically for this date (within {SUPPORTED_FORECAST_DAYS}-day window).")
         else:
             st.warning(
                 "Weather forecast data is unavailable this far in advance, so please choose expected weather conditions."
@@ -324,6 +320,11 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
                 required_numeric_keys=wx_numeric_cols,
             )
             weather_vals = {k: float(v) for k, v in (fetched or {}).items()} if fetched else None
+            if weather_vals:
+                wx_display = {k: f"{v:.1f}" for k, v in weather_vals.items()}
+                st.success(f"Live forecast fetched: {wx_display}")
+            else:
+                st.warning("Could not fetch live forecast — weather will be median-imputed.")
         else:
             _ph = "— choose —"
             if manual_dep_choice in (None, _ph) or manual_dest_choice in (None, _ph):

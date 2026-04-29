@@ -3,7 +3,15 @@
     "dep_hour",
     "month",
     "day_of_week",
-    "DISTANCE"
+    "DISTANCE",
+    "w_tmax",
+    "w_tmin",
+    "w_prcp",
+    "w_wspd",
+    "dw_tmax",
+    "dw_tmin",
+    "dw_prcp",
+    "dw_wspd"
   ],
   "categorical": [
     "OP_CARRIER",

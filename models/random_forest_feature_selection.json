@@ -3,53 +3,85 @@
   "top_features": [
     {
       "feature": "dep_hour",
-      "importance": 0.2866
+      "importance": 0.1046
+    },
+    {
+      "feature": "w_tmax",
+      "importance": 0.0998
+    },
+    {
+      "feature": "w_tmin",
+      "importance": 0.0839
+    },
+    {
+      "feature": "w_wspd",
+      "importance": 0.0836
     },
     {
       "feature": "ORIGIN",
-      "importance": 0.2237
+      "importance": 0.0777
     },
     {
-      "feature": "DEST",
-      "importance": 0.1596
-    },
-    {
-      "feature": "day_of_week",
-      "importance": 0.1209
-    },
-    {
-      "feature": "OP_CARRIER",
-      "importance": 0.1098
-    },
-    {
-      "feature": "DISTANCE",
-      "importance": 0.0993
+      "feature": "w_prcp",
+      "importance": 0.0775
     }
   ],
   "all_feature_importances": [
     {
       "feature": "dep_hour",
-      "importance": 0.2866
+      "importance": 0.1046
+    },
+    {
+      "feature": "w_tmax",
+      "importance": 0.0998
+    },
+    {
+      "feature": "w_tmin",
+      "importance": 0.0839
+    },
+    {
+      "feature": "w_wspd",
+      "importance": 0.0836
     },
     {
       "feature": "ORIGIN",
-      "importance": 0.2237
+      "importance": 0.0777
+    },
+    {
+      "feature": "w_prcp",
+      "importance": 0.0775
+    },
+    {
+      "feature": "dw_wspd",
+      "importance": 0.0704
+    },
+    {
+      "feature": "dw_tmax",
+      "importance": 0.0689
     },
     {
       "feature": "DEST",
-      "importance": 0.1596
+      "importance": 0.0685
     },
     {
-      "feature": "day_of_week",
-      "importance": 0.1209
-    },
-    {
-      "feature": "OP_CARRIER",
-      "importance": 0.1098
+      "feature": "dw_tmin",
+      "importance": 0.0661
     },
     {
       "feature": "DISTANCE",
-      "importance": 0.0993
+      "importance": 0.0599
+    },
+    {
+      "feature": "dw_prcp",
+      "importance": 0.0504
+    },
+    {
+      "feature": "OP_CARRIER",
+      "importance": 0.0474
+    },
+    {
+      "feature": "day_of_week",
+      "importance": 0.0412
     },
     {
       "feature": "month",
@@ -57,10 +89,10 @@
     }
   ],
   "reduced_metrics": {
-    "accuracy": 0.6163666666666666,
-    "precision": 0.3181304488214401,
-    "recall": 0.5627588176495788,
-    "f1": 0.4064772317054304,
+    "accuracy": 0.727,
+    "precision": 0.42963841138114994,
+    "recall": 0.5174925032129087,
+    "f1": 0.4694908666925768,
     "n_train": 120000,
     "n_test": 30000,
     "delay_rate_test": 0.23343333333333333
