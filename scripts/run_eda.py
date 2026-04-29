@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""Exploratory plots + summary stats -> reports/figures and reports/eda_summary.md."""
+"""Exploratory plots + summary stats -> reports/figures and reports/eda_summary.md.
+
+Data loading uses **Polars** for fast columnar CSV ingestion — BTS flight data can
+grow to millions of rows across multi-month pulls, and Polars' lazy scan reads only
+the columns required, significantly reducing I/O vs. a full pandas read.
+
+EDA aggregations (delay rate by hour, by carrier) are expressed as **SQL** queries
+against an in-memory SQLite database.  GROUP BY is the natural language for these
+summaries, and the explicit SQL makes each question reproducible and auditable.
+"""
 
 from __future__ import annotations
 
 import argparse
 import os
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -25,6 +35,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import polars as pl
 import seaborn as sns
 
 from flightdelaycast.config import PROCESSED_FLIGHTS, REPORTS_DIR, REPORTS_FIGURES  # noqa: E402
@@ -45,7 +56,25 @@ def main() -> None:
         print("Run: python scripts/build_processed.py", file=sys.stderr)
         raise SystemExit(1)
 
-    df = pd.read_csv(args.data, low_memory=False)
+    # ── Load with Polars (columnar, lazy scan; converts to pandas for plotting) ──
+    # Selecting only the columns needed for EDA avoids loading 100+ BTS fields.
+    _EDA_COLS = [
+        "dep_hour", "month", "day_of_week", "DISTANCE",
+        "OP_CARRIER", "is_delayed", "w_tmax", "w_prcp",
+    ]
+    lf = pl.scan_csv(str(args.data), infer_schema_length=10000)
+    available_cols = set(lf.collect_schema().names())
+    select_cols = [c for c in _EDA_COLS if c in available_cols]
+    df_pl = lf.select(select_cols).collect()
+    print(f"Loaded {len(df_pl):,} rows via Polars (columns: {select_cols})")
+    df = df_pl.to_pandas()
+
+    # ── In-memory SQLite for SQL-based aggregations ───────────────────────────
+    # Writing to an in-memory DB lets us express GROUP BY summaries in plain SQL,
+    # which is the natural language for per-hour / per-carrier aggregations.
+    conn = sqlite3.connect(":memory:")
+    df.to_sql("flights", conn, index=False, if_exists="replace")
+
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     sns.set_theme(style="whitegrid", context="talk")
@@ -94,12 +123,22 @@ def main() -> None:
     fig.savefig(args.out_dir / "01_class_balance.png", dpi=150)
     plt.close(fig)
 
+    # SQL: hourly delay rate — GROUP BY is the natural expression of this question
+    hourly_sql = pd.read_sql(
+        """
+        SELECT CAST(dep_hour AS INTEGER) AS dep_h,
+               AVG(is_delayed)           AS delay_rate
+        FROM   flights
+        GROUP  BY dep_h
+        ORDER  BY dep_h
+        """,
+        conn,
+    )
     fig, ax = plt.subplots(figsize=(8, 4))
-    hourly = df.assign(dep_h=np.floor(df["dep_hour"]).clip(0, 23)).groupby("dep_h")["is_delayed"].mean()
-    hourly.plot(ax=ax, marker="o")
-    ax.set_xlabel("Scheduled dep hour (approx)")
+    ax.plot(hourly_sql["dep_h"], hourly_sql["delay_rate"], marker="o")
+    ax.set_xlabel("Scheduled dep hour")
     ax.set_ylabel("P(delayed)")
-    ax.set_title("Delay rate by hour of day")
+    ax.set_title("Delay rate by hour of day  [SQL: GROUP BY dep_hour]")
     fig.tight_layout()
     fig.savefig(args.out_dir / "02_delay_rate_by_hour.png", dpi=150)
     plt.close(fig)
@@ -128,14 +167,32 @@ def main() -> None:
             )
             summary_lines.append("")
 
+    # SQL: carrier delay rate — top 12 by volume, then sorted by delay rate for chart
+    carrier_sql = pd.read_sql(
+        """
+        SELECT   OP_CARRIER,
+                 AVG(is_delayed) AS delay_rate,
+                 COUNT(*)        AS n_flights
+        FROM     flights
+        GROUP BY OP_CARRIER
+        ORDER BY n_flights DESC
+        LIMIT    12
+        """,
+        conn,
+    )
+    carrier_sql = carrier_sql.sort_values("delay_rate", ascending=False)
     fig, ax = plt.subplots(figsize=(10, 5))
-    top = df["OP_CARRIER"].value_counts().head(12).index
-    sub = df[df["OP_CARRIER"].isin(top)]
-    order = sub.groupby("OP_CARRIER")["is_delayed"].mean().sort_values(ascending=False).index
-    sns.barplot(data=sub, x="OP_CARRIER", y="is_delayed", order=order, ax=ax, color="#54a24b")
+    sns.barplot(
+        data=carrier_sql,
+        x="OP_CARRIER",
+        y="delay_rate",
+        order=carrier_sql["OP_CARRIER"].tolist(),
+        ax=ax,
+        color="#54a24b",
+    )
     ax.set_ylabel("P(delayed)")
     ax.set_xlabel("Carrier (top 12 by volume)")
-    ax.set_title("Delay rate by airline")
+    ax.set_title("Delay rate by airline  [SQL: GROUP BY OP_CARRIER]")
     plt.xticks(rotation=45, ha="right")
     fig.tight_layout()
     fig.savefig(args.out_dir / "03_delay_rate_by_carrier.png", dpi=150)
@@ -207,6 +264,7 @@ def main() -> None:
     )
     summary_lines.append("")
 
+    conn.close()
     summary_md.write_text("\n".join(summary_lines), encoding="utf-8")
 
     print(f"Figures written to {args.out_dir}")
