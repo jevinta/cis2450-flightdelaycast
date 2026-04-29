@@ -13,6 +13,7 @@ if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -20,10 +21,24 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
 from flightdelaycast.model_features import feature_columns  # noqa: E402
+
+
+def _drop_highly_correlated_numeric(
+    df: pd.DataFrame, numeric_cols: list[str], threshold: float = 0.9
+) -> tuple[list[str], list[str]]:
+    """Keep numeric columns while dropping high-correlation duplicates."""
+    usable = [c for c in numeric_cols if c in df.columns]
+    if len(usable) < 2:
+        return usable, []
+    corr = df[usable].corr(numeric_only=True).abs()
+    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+    to_drop = [col for col in upper.columns if (upper[col] > threshold).any()]
+    keep = [c for c in usable if c not in to_drop]
+    return keep, to_drop
 
 
 def main() -> None:
@@ -43,6 +58,7 @@ def main() -> None:
 
     df = pd.read_csv(args.data, low_memory=False)
     num_cols, cat_cols = feature_columns(df)
+    num_cols, dropped_corr = _drop_highly_correlated_numeric(df, num_cols, threshold=0.9)
     use_cols = num_cols + cat_cols
     miss = [c for c in use_cols if c not in df.columns]
     if miss:
@@ -62,7 +78,7 @@ def main() -> None:
                 Pipeline(
                     steps=[
                         ("imputer", SimpleImputer(strategy="median")),
-                        ("scale", StandardScaler()),
+                        ("scale", RobustScaler()),
                     ]
                 ),
                 num_cols,
@@ -100,6 +116,8 @@ def main() -> None:
         "n_train": int(len(X_train)),
         "n_test": int(len(X_test)),
         "delay_rate_test": float(y_test.mean()),
+        "corr_drop_threshold": 0.9,
+        "dropped_high_corr_numeric": dropped_corr,
     }
 
     args.out_model.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +127,8 @@ def main() -> None:
     feat_meta = {"numeric": num_cols, "categorical": cat_cols}
     args.out_features.write_text(json.dumps(feat_meta, indent=2))
     print(json.dumps(metrics, indent=2))
+    if dropped_corr:
+        print(f"Dropped high-correlation numeric features: {dropped_corr}")
     print(classification_report(y_test, pred, digits=3))
     print(f"Saved model -> {args.out_model}")
     print(f"Saved metrics -> {args.out_metrics}")

@@ -5,5 +5,7 @@
   "f1": 0.41390770804039373,
   "n_train": 48000,
   "n_test": 12000,
-  "delay_rate_test": 0.233
+  "delay_rate_test": 0.233,
+  "corr_drop_threshold": 0.9,
+  "dropped_high_corr_numeric": []
 }

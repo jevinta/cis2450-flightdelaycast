@@ -18,7 +18,7 @@ import joblib
 import pandas as pd
 import streamlit as st
 
-from flightdelaycast.config import AIRPORTS_CSV, DELAY_THRESHOLD_MINUTES, MODELS_DIR, REPORTS_FIGURES
+from flightdelaycast.config import AIRPORTS_CSV, DELAY_THRESHOLD_MINUTES, MODELS_DIR, REPORTS_DIR, REPORTS_FIGURES
 from flightdelaycast.model_features import prediction_dataframe
 from flightdelaycast.route_distance import great_circle_miles_between_airports
 
@@ -91,6 +91,7 @@ EDA_CAPTIONS: dict[str, str] = {
     "02_delay_rate_by_hour": "Delay rate varies by scheduled departure hour; time-of-day is a strong signal.",
     "03_delay_rate_by_carrier": "Carriers differ systematically; airline is a useful categorical feature.",
     "04_correlation_numeric": "Relationships among numeric fields inform feature scaling and redundancy.",
+    "05_outlier_boxplots": "IQR-based outlier scan highlights extreme values and informs handling policy.",
 }
 
 SPEAKER_OVERVIEW = """
@@ -174,7 +175,7 @@ def tab_overview() -> None:
         st.markdown("**Modeling (current app)**")
         st.markdown(
             """
-            - **Preprocessing:** Imputation, scaling for numerics, one-hot encoding for categoricals (same feature schema across models).
+            - **Preprocessing:** Median imputation, **robust scaling** for numerics (outlier-resistant), one-hot encoding for categoricals, and high-correlation numeric filtering before training.
             - **Classifiers:** **Logistic regression** (sparse OHE), **Random Forest**, and **histogram gradient boosting** (dense OHE in training scripts). Use the sidebar selector on the demo tab to compare live **P(delayed)** from each trained pipeline.
             """
         )
@@ -287,7 +288,7 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
 
     if not submitted:
         st.info("Fill in **origin**, **destination**, and **scheduled departure time**, then click **Run prediction**.")
-        st.stop()
+        return
 
     errors: list[str] = []
     if flight_date < today or flight_date > max_flight_date:
@@ -338,7 +339,7 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
     if errors:
         for e in errors:
             st.error(e)
-        st.stop()
+        return
 
     assert distance_mi is not None
     row = prediction_dataframe(
@@ -403,6 +404,16 @@ def tab_eda() -> None:
     st.markdown(
         "Figures produced by `scripts/run_eda.py`. Commit `reports/figures/*.png` so **Streamlit Community Cloud** can display them."
     )
+    summary_path = REPORTS_DIR / "eda_summary.md"
+    if summary_path.is_file():
+        with st.expander("EDA findings summary (rubric-aligned)", expanded=True):
+            st.markdown(summary_path.read_text(encoding="utf-8"))
+    else:
+        st.info(
+            "No EDA findings summary found yet. Run `python scripts/run_eda.py` to generate `reports/eda_summary.md`."
+        )
+
+    st.divider()
     fig_dir = REPORTS_FIGURES
     if not fig_dir.is_dir():
         st.info(f"No figures directory at `{fig_dir}` yet.")

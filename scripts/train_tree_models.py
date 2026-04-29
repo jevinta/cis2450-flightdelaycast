@@ -22,7 +22,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score
 from sklearn.model_selection import RandomizedSearchCV, train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
 from flightdelaycast.model_features import feature_columns  # noqa: E402
@@ -46,25 +46,45 @@ HGB_PARAM_DIST = {
 }
 
 
+def _drop_highly_correlated_numeric(
+    df: pd.DataFrame, numeric_cols: list[str], threshold: float = 0.9
+) -> tuple[list[str], list[str]]:
+    usable = [c for c in numeric_cols if c in df.columns]
+    if len(usable) < 2:
+        return usable, []
+    corr = df[usable].corr(numeric_only=True).abs()
+    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
+    to_drop = [col for col in upper.columns if (upper[col] > threshold).any()]
+    keep = [c for c in usable if c not in to_drop]
+    return keep, to_drop
+
+
 def _preprocess(num_cols: list[str], cat_cols: list[str]) -> ColumnTransformer:
     # Dense OHE: HistGradientBoostingClassifier does not accept sparse X.
     # RandomForest works with dense as well.
-    transformers = []
+    # RobustScaler tolerates heavy-tailed numerics (distance, weather) vs. plain z-score scaling.
+    transformers: list = []
     if num_cols:
-        transformers.append((
-            "num",
-            Pipeline(steps=[
-                ("imputer", SimpleImputer(strategy="median")),
-                ("scale", StandardScaler()),
-            ]),
-            num_cols,
-        ))
+        transformers.append(
+            (
+                "num",
+                Pipeline(
+                    steps=[
+                        ("imputer", SimpleImputer(strategy="median")),
+                        ("scale", RobustScaler()),
+                    ]
+                ),
+                num_cols,
+            )
+        )
     if cat_cols:
-        transformers.append((
-            "cat",
-            OneHotEncoder(handle_unknown="ignore", max_categories=50, sparse_output=False),
-            cat_cols,
-        ))
+        transformers.append(
+            (
+                "cat",
+                OneHotEncoder(handle_unknown="ignore", max_categories=50, sparse_output=False),
+                cat_cols,
+            )
+        )
     return ColumnTransformer(transformers=transformers)
 
 
@@ -317,6 +337,7 @@ def main() -> None:
 
     df = pd.read_csv(args.data, low_memory=False)
     num_cols, cat_cols = feature_columns(df)
+    num_cols, dropped_corr = _drop_highly_correlated_numeric(df, num_cols, threshold=0.9)
     use_cols = num_cols + cat_cols
     miss = [c for c in use_cols if c not in df.columns]
     if miss:
@@ -330,13 +351,24 @@ def main() -> None:
 
     args.out_dir.mkdir(parents=True, exist_ok=True)
     feat_meta = {"numeric": num_cols, "categorical": cat_cols}
+    if dropped_corr:
+        feat_meta["dropped_high_corr_numeric"] = dropped_corr
     results: dict[str, dict] = {}
 
     if args.model in ("rf", "both"):
         pipe, metrics, pred, best_params = _train_rf(
-            X_train, X_test, y_train, y_test, num_cols, cat_cols, args.seed,
-            tune=args.tune, n_iter=args.tune_iter,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            num_cols,
+            cat_cols,
+            args.seed,
+            tune=args.tune,
+            n_iter=args.tune_iter,
         )
+        metrics["corr_drop_threshold"] = 0.9
+        metrics["dropped_high_corr_numeric"] = dropped_corr
         stem = args.out_dir / "random_forest"
         joblib.dump(pipe, stem.with_suffix(".joblib"))
         stem.with_name("random_forest_metrics.json").write_text(json.dumps(metrics, indent=2))
@@ -368,9 +400,18 @@ def main() -> None:
 
     if args.model in ("hgb", "both"):
         pipe, metrics, pred, best_params = _train_hgb(
-            X_train, X_test, y_train, y_test, num_cols, cat_cols, args.seed,
-            tune=args.tune, n_iter=args.tune_iter,
+            X_train,
+            X_test,
+            y_train,
+            y_test,
+            num_cols,
+            cat_cols,
+            args.seed,
+            tune=args.tune,
+            n_iter=args.tune_iter,
         )
+        metrics["corr_drop_threshold"] = 0.9
+        metrics["dropped_high_corr_numeric"] = dropped_corr
         stem = args.out_dir / "hist_gradient_boosting"
         joblib.dump(pipe, stem.with_name("hist_gradient_boosting.joblib"))
         stem.with_name("hist_gradient_boosting_metrics.json").write_text(json.dumps(metrics, indent=2))
@@ -391,6 +432,8 @@ def main() -> None:
         comp = args.out_dir / "tree_models_comparison.json"
         comp.write_text(json.dumps(results, indent=2))
         print(f"Wrote comparison → {comp}")
+    if dropped_corr:
+        print(f"Dropped high-correlation numeric features: {dropped_corr}")
 
 
 if __name__ == "__main__":
