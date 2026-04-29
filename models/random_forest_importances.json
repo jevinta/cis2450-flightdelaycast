@@ -1,102 +1,102 @@
 [
   {
     "feature": "num__dep_hour",
-    "importance": 0.22733329005519584
-  },
-  {
-    "feature": "num__DISTANCE",
-    "importance": 0.09691551324172955
+    "importance": 0.22730734961346954
   },
   {
     "feature": "num__day_of_week",
-    "importance": 0.08137489298189057
+    "importance": 0.07092503921024987
+  },
+  {
+    "feature": "num__DISTANCE",
+    "importance": 0.06197234334151753
   },
   {
     "feature": "cat__ORIGIN_ORD",
-    "importance": 0.033679993272719484
+    "importance": 0.04706074614800603
   },
   {
     "feature": "num__w_tmax",
-    "importance": 0.029887568155456047
+    "importance": 0.032751720840503366
   },
   {
     "feature": "num__w_tmin",
-    "importance": 0.024992130293445304
+    "importance": 0.025830009500928192
   },
   {
     "feature": "num__w_wspd",
-    "importance": 0.02382765659636364
+    "importance": 0.025211730387472243
   },
   {
     "feature": "num__dw_wspd",
-    "importance": 0.02361275837046598
-  },
-  {
-    "feature": "num__dw_tmax",
-    "importance": 0.021871060663963496
-  },
-  {
-    "feature": "num__dw_tmin",
-    "importance": 0.019537651136767878
-  },
-  {
-    "feature": "cat__ORIGIN_DFW",
-    "importance": 0.01739083941483789
-  },
-  {
-    "feature": "cat__OP_CARRIER_DL",
-    "importance": 0.016836445676734448
-  },
-  {
-    "feature": "cat__OP_CARRIER_WN",
-    "importance": 0.01610580345812857
+    "importance": 0.024680916819915032
   },
   {
     "feature": "cat__OP_CARRIER_AA",
-    "importance": 0.016090084517835064
+    "importance": 0.02252662327195444
   },
   {
-    "feature": "cat__OP_CARRIER_UA",
-    "importance": 0.013831697676952828
+    "feature": "num__dw_tmax",
+    "importance": 0.022498772201379965
   },
   {
-    "feature": "num__w_prcp",
-    "importance": 0.013408318502044915
+    "feature": "cat__OP_CARRIER_DL",
+    "importance": 0.021418849773156223
+  },
+  {
+    "feature": "cat__ORIGIN_DFW",
+    "importance": 0.020965898648977323
+  },
+  {
+    "feature": "num__dw_tmin",
+    "importance": 0.018633892922798746
   },
   {
     "feature": "cat__DEST_DFW",
-    "importance": 0.012959537584220237
+    "importance": 0.017545549119118303
   },
   {
-    "feature": "cat__ORIGIN_infrequent_sklearn",
-    "importance": 0.012561069610359556
+    "feature": "num__w_prcp",
+    "importance": 0.01645369050243974
   },
   {
-    "feature": "cat__DEST_ORD",
-    "importance": 0.010372186561264781
+    "feature": "cat__OP_CARRIER_UA",
+    "importance": 0.015260131670371019
   },
   {
-    "feature": "cat__DEST_infrequent_sklearn",
-    "importance": 0.010070771385548
+    "feature": "cat__OP_CARRIER_WN",
+    "importance": 0.014194925568980476
   },
   {
     "feature": "cat__ORIGIN_PHX",
-    "importance": 0.009462219539828615
+    "importance": 0.012289949503966998
   },
   {
     "feature": "cat__ORIGIN_MIA",
-    "importance": 0.008657650531185548
+    "importance": 0.011597142090302725
   },
   {
-    "feature": "cat__OP_CARRIER_AS",
-    "importance": 0.0068574131913920165
+    "feature": "cat__ORIGIN_infrequent_sklearn",
+    "importance": 0.010145616115629322
+  },
+  {
+    "feature": "cat__DEST_ORD",
+    "importance": 0.009534808558993621
   },
   {
     "feature": "cat__DEST_EWR",
-    "importance": 0.006728172082070725
+    "importance": 0.008463782862668343
+  },
+  {
+    "feature": "num__dw_prcp",
+    "importance": 0.00763587003383154
   },
   {
     "feature": "cat__ORIGIN_LAX",
-    "importance": 0.006681491888486477
+    "importance": 0.007263715773175399
+  },
+  {
+    "feature": "cat__ORIGIN_DTW",
+    "importance": 0.007142068751387997
   }
 ]
