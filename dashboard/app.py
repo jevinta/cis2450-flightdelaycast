@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import html
 import json
+import re
 import sys
 from datetime import date, time, timedelta
 from pathlib import Path
@@ -109,6 +111,82 @@ SPEAKER_DEMO = """
 - **Caveat:** Illustrative; performance depends on training window and whether weather columns exist in the saved model.
 """
 
+_GFM_TABLE_SEP_LINE = re.compile(r"^\s*\|?[\s\-:|]+\|")
+
+
+def _gfm_pipe_table_to_html(table_lines: list[str]) -> str:
+    """Parse GitHub pipe-table lines into an HTML table with visible white grid (inline styles)."""
+    rows: list[list[str]] = []
+    for raw in table_lines:
+        if _GFM_TABLE_SEP_LINE.match(raw):
+            continue
+        if not raw.strip().startswith("|"):
+            break
+        parts = [p.strip() for p in raw.strip().split("|")]
+        if parts and parts[0] == "":
+            parts = parts[1:]
+        if parts and parts[-1] == "":
+            parts = parts[:-1]
+        if parts:
+            rows.append(parts)
+    if not rows:
+        return ""
+
+    border = "1px solid #ffffff"
+    t_style = (
+        "border-collapse:collapse;width:100%;margin:0.75rem 0 1.25rem;"
+        "border:2px solid #ffffff;background:rgba(8,12,28,0.92);"
+        "border-radius:10px;overflow:hidden;"
+    )
+    chunks: list[str] = [f'<table style="{t_style}">']
+    for ri, row in enumerate(rows):
+        chunks.append("<tr>")
+        for ci, cell in enumerate(row):
+            is_head = ri == 0
+            tag = "th" if is_head else "td"
+            align = "left" if ci == 0 else "right"
+            cs = f"border:{border};padding:0.5rem 0.65rem;text-align:{align};color:#f8fafc;"
+            if is_head:
+                cs += "font-weight:600;background:rgba(6,10,26,0.98);"
+            elif ri % 2 == 0:
+                cs += "background:rgba(255,255,255,0.06);"
+            chunks.append(f'<{tag} style="{cs}">{html.escape(cell)}</{tag}>')
+        chunks.append("</tr>")
+    chunks.append("</table>")
+    return "".join(chunks)
+
+
+def _eda_summary_segments(md_text: str):
+    """Yield ('md', str) and ('html', table_html) — Streamlit's MD renderer drops reliable table borders."""
+    lines = md_text.splitlines(keepends=True)
+    i = 0
+    buf: list[str] = []
+    while i < len(lines):
+        if lines[i].strip().startswith("|") and i + 1 < len(lines) and _GFM_TABLE_SEP_LINE.match(lines[i + 1]):
+            if buf:
+                yield "md", "".join(buf)
+                buf = []
+            j = i
+            tbl: list[str] = []
+            while j < len(lines) and lines[j].strip().startswith("|"):
+                tbl.append(lines[j])
+                j += 1
+            yield "html", _gfm_pipe_table_to_html(tbl)
+            i = j
+            continue
+        buf.append(lines[i])
+        i += 1
+    if buf:
+        yield "md", "".join(buf)
+
+
+def _render_eda_summary_markdown(md_text: str) -> None:
+    for kind, segment in _eda_summary_segments(md_text):
+        if kind == "md":
+            st.markdown(segment)
+        else:
+            st.markdown(segment, unsafe_allow_html=True)
+
 
 @st.cache_resource
 def load_trained_bundle(model_id: str):
@@ -131,16 +209,542 @@ def _risk_tone(p: float) -> tuple[str, str]:
 
 
 def _inject_style() -> None:
+    # Glass / mesh aesthetic inspired by frosted neon gradients (backdrop-filter + noise overlay).
     st.markdown(
         """
         <style>
-          div[data-testid="stMetricValue"] { font-size: 2.1rem; }
+          @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+          :root {
+            --fdc-glass: rgba(18, 22, 45, 0.55);
+            --fdc-glass-border: rgba(255, 255, 255, 0.12);
+            --fdc-glow-cyan: rgba(0, 240, 255, 0.45);
+            --fdc-glow-magenta: rgba(255, 0, 200, 0.35);
+            --fdc-text: rgba(245, 248, 255, 0.95);
+            --fdc-muted: rgba(200, 210, 230, 0.75);
+            --fdc-mesh:
+              radial-gradient(ellipse 90% 60% at 12% 25%, rgba(0, 220, 255, 0.38) 0%, transparent 52%),
+              radial-gradient(ellipse 70% 50% at 88% 12%, rgba(255, 0, 180, 0.32) 0%, transparent 48%),
+              radial-gradient(ellipse 55% 45% at 50% 95%, rgba(120, 60, 255, 0.4) 0%, transparent 50%),
+              radial-gradient(ellipse 50% 40% at 75% 60%, rgba(0, 150, 255, 0.2) 0%, transparent 45%),
+              linear-gradient(168deg, #050510 0%, #0c0a1a 28%, #0a1228 55%, #10081c 100%);
+          }
+
+          /* Never set light text on html/body — Streamlit portals (dropdowns, date picker) attach there and need dark text on white menus. */
+          html, body {
+            font-family: "DM Sans", "Segoe UI", system-ui, sans-serif;
+          }
+
+          [data-testid="stAppViewContainer"],
+          .stApp {
+            color: rgba(235, 240, 255, 0.94);
+          }
+
+          .stApp {
+            background: var(--fdc-mesh) !important;
+            position: relative;
+          }
+
+          /* Light UI surfaces rendered in portals (select menu, calendar, tooltips) */
+          [data-baseweb="popover"],
+          [data-baseweb="popover"] ul,
+          [data-baseweb="popover"] li,
+          [data-baseweb="popover"] [role="option"],
+          [data-baseweb="menu"],
+          [data-baseweb="menu"] li {
+            color: #0f172a !important;
+            background-color: #f8fafc !important;
+          }
+
+          [data-baseweb="popover"] [role="option"]:hover,
+          [data-baseweb="menu"] li:hover {
+            background-color: #e0f2fe !important;
+            color: #0f172a !important;
+          }
+
+          [data-baseweb="calendar"] {
+            color: #0f172a !important;
+            background-color: #f8fafc !important;
+          }
+
+          [data-baseweb="calendar"] button {
+            color: #0f172a !important;
+          }
+
+          /* Subtle grain — avoid mix-blend-mode here: it breaks compositing in Safari/WebKit (blank page). */
+          .stApp::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.11;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+            background-size: 180px 180px;
+          }
+
+          [data-testid="stAppViewContainer"] {
+            position: relative;
+            z-index: 1;
+          }
+
+          /* Hide default Streamlit top chrome (thin header strip above tabs/title) */
+          [data-testid="stHeader"],
+          [data-testid="stDecoration"] {
+            display: none !important;
+          }
+
+          section.main {
+            position: relative;
+            z-index: 2;
+            background: transparent !important;
+          }
+
+          section.main .block-container {
+            padding-top: 2rem;
+            padding-bottom: 3rem;
+            max-width: 72rem;
+          }
+
+          section.main h1 {
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            font-size: clamp(1.85rem, 4vw, 2.35rem);
+            background: linear-gradient(105deg, #8ae8ff 0%, #c4b5fd 45%, #f472b6 95%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.35rem;
+          }
+
+          section.main h2, section.main h3 {
+            color: var(--fdc-text) !important;
+            font-weight: 600;
+          }
+
+          section.main .stMarkdown p,
+          section.main .stMarkdown li {
+            color: var(--fdc-muted);
+          }
+
+          section.main .stMarkdown strong {
+            color: var(--fdc-text) !important;
+          }
+
+          section.main a {
+            color: #7dd3fc !important;
+          }
+
+          section.main code {
+            background: rgba(12, 20, 42, 0.95) !important;
+            color: #7dd3fc !important;
+            padding: 0.15rem 0.45rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+          }
+
+          /* Markdown tables — Streamlit puts HTML under [data-testid="stMarkdownContainer"], often WITHOUT .stMarkdown wrapping the table, so target containers directly. */
+          section.main [data-testid="stMarkdownContainer"] table,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] table,
+          section.main .stMarkdown table,
+          .streamlit-expanderContent .stMarkdown table {
+            border-collapse: collapse !important;
+            border-spacing: 0 !important;
+            width: 100%;
+            margin: 0.75rem 0 1.25rem;
+            font-size: 0.9rem;
+            background: rgba(8, 12, 28, 0.88) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12) inset;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] thead,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] thead,
+          section.main .stMarkdown thead,
+          .streamlit-expanderContent .stMarkdown thead {
+            background: rgba(6, 10, 26, 0.95) !important;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] th,
+          section.main [data-testid="stMarkdownContainer"] td,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] th,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] td,
+          section.main .stMarkdown th,
+          section.main .stMarkdown td,
+          .streamlit-expanderContent .stMarkdown th,
+          .streamlit-expanderContent .stMarkdown td {
+            border: 1px solid rgba(255, 255, 255, 0.28) !important;
+            padding: 0.5rem 0.65rem !important;
+            color: rgba(235, 240, 255, 0.96) !important;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] th,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] th,
+          section.main .stMarkdown th,
+          .streamlit-expanderContent .stMarkdown th {
+            font-weight: 600;
+            color: rgba(210, 225, 255, 0.98) !important;
+            text-align: center;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] td,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] td,
+          section.main .stMarkdown td,
+          .streamlit-expanderContent .stMarkdown td {
+            text-align: right;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] td:first-child,
+          section.main [data-testid="stMarkdownContainer"] th:first-child,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] td:first-child,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] th:first-child,
+          section.main .stMarkdown td:first-child,
+          section.main .stMarkdown th:first-child,
+          .streamlit-expanderContent .stMarkdown td:first-child,
+          .streamlit-expanderContent .stMarkdown th:first-child {
+            text-align: left;
+          }
+
+          section.main [data-testid="stMarkdownContainer"] tbody tr:nth-child(even) td,
+          .streamlit-expanderContent [data-testid="stMarkdownContainer"] tbody tr:nth-child(even) td,
+          section.main .stMarkdown tbody tr:nth-child(even) td,
+          .streamlit-expanderContent .stMarkdown tbody tr:nth-child(even) td {
+            background: rgba(255, 255, 255, 0.04) !important;
+          }
+
+          /* Catch-all: any HTML table rendered inside the main column (Streamlit DOM varies by version) */
+          section.main .block-container table {
+            border-collapse: collapse !important;
+            background: rgba(8, 12, 28, 0.88) !important;
+            border: 1px solid rgba(255, 255, 255, 0.22) !important;
+          }
+
+          section.main .block-container table th,
+          section.main .block-container table td {
+            border: 1px solid rgba(255, 255, 255, 0.28) !important;
+          }
+
+          section.main .stCaption, section.main [data-testid="stCaptionContainer"] {
+            color: var(--fdc-muted) !important;
+          }
+
+          /* Sidebar — glass panel */
+          [data-testid="stSidebar"] {
+            position: relative;
+            z-index: 2;
+            background: linear-gradient(180deg, rgba(12, 14, 32, 0.72) 0%, rgba(8, 10, 28, 0.58) 100%) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-right: 1px solid var(--fdc-glass-border);
+            box-shadow: 4px 0 32px rgba(0, 0, 0, 0.25);
+          }
+
+          [data-testid="stSidebar"] > div:first-child {
+            background: transparent !important;
+          }
+
+          [data-testid="stSidebar"] .stMarkdown, [data-testid="stSidebar"] p,
+          [data-testid="stSidebar"] span, [data-testid="stSidebar"] label {
+            color: var(--fdc-muted) !important;
+          }
+
+          [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+            color: var(--fdc-text) !important;
+            font-weight: 700;
+          }
+
+          [data-testid="stSidebar"] [data-baseweb="select"] > div,
+          [data-testid="stSidebar"] [data-baseweb="input"] input {
+            background: rgba(6, 10, 28, 0.88) !important;
+            border-color: rgba(255, 255, 255, 0.14) !important;
+            color: rgba(245, 248, 255, 0.97) !important;
+          }
+
+          [data-testid="stSidebar"] [data-baseweb="select"] span {
+            color: rgba(245, 248, 255, 0.95) !important;
+          }
+
+          /* Tabs — pill glass bar */
+          .stTabs [data-baseweb="tab-list"] {
+            gap: 0.5rem;
+            background: rgba(12, 16, 40, 0.45);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid var(--fdc-glass-border);
+            border-radius: 14px;
+            padding: 0.4rem 0.5rem;
+            margin-bottom: 1.25rem;
+          }
+
+          .stTabs [data-baseweb="tab"] {
+            border-radius: 10px !important;
+            color: var(--fdc-muted) !important;
+            font-weight: 600;
+            padding: 0.55rem 1rem !important;
+          }
+
+          .stTabs [aria-selected="true"] {
+            background: linear-gradient(135deg, rgba(0, 200, 255, 0.25), rgba(200, 80, 255, 0.2)) !important;
+            color: var(--fdc-text) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+          }
+
+          /* Metrics — glass chips */
+          [data-testid="stMetricContainer"] {
+            background: var(--fdc-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--fdc-glass-border);
+            border-radius: 14px;
+            padding: 0.85rem 1rem !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+          }
+
+          div[data-testid="stMetricValue"] {
+            font-size: 2rem !important;
+            font-weight: 700;
+            color: #a5f3fc !important;
+          }
+
+          div[data-testid="stMetricLabel"] label {
+            color: var(--fdc-muted) !important;
+          }
+
+          /* Primary buttons */
+          .stButton > button[kind="primary"], div[data-testid="stFormSubmitButton"] button {
+            background: linear-gradient(135deg, #0891b2, #7c3aed) !important;
+            color: white !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+            border-radius: 12px !important;
+            font-weight: 600 !important;
+            box-shadow: 0 4px 20px rgba(8, 145, 178, 0.35);
+          }
+
+          .stButton > button[kind="primary"]:hover {
+            box-shadow: 0 6px 28px rgba(124, 58, 237, 0.45);
+            border-color: rgba(255, 255, 255, 0.35) !important;
+          }
+
+          /* Inputs (control surface = dark; menu pops out separately) */
+          .stTextInput input,
+          .stSelectbox div[data-baseweb="select"] > div,
+          .stDateInput input,
+          .stTimeInput input,
+          .stNumberInput input {
+            border-radius: 10px !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+            background: rgba(8, 12, 30, 0.85) !important;
+            color: rgba(245, 248, 255, 0.97) !important;
+          }
+
+          /* Time / date pickers — BaseWeb wraps the field in extra divs (fixes solid white box) */
+          .stTimeInput > div,
+          .stDateInput > div {
+            background: transparent !important;
+          }
+
+          .stTimeInput [data-baseweb="input"],
+          .stTimeInput [data-baseweb="select"],
+          .stDateInput [data-baseweb="input"] {
+            background: rgba(8, 12, 30, 0.92) !important;
+            border-radius: 10px !important;
+            border-color: rgba(255, 255, 255, 0.15) !important;
+          }
+
+          .stTimeInput [data-baseweb="select"] > div,
+          .stTimeInput [data-baseweb="input"] input {
+            background: rgba(8, 12, 30, 0.92) !important;
+            color: rgba(245, 248, 255, 0.98) !important;
+          }
+
+          .stTimeInput [data-baseweb="select"] span,
+          .stDateInput [data-baseweb="input"] span {
+            color: rgba(245, 248, 255, 0.96) !important;
+          }
+
+          .stDateInput [data-baseweb="input"] input {
+            background: rgba(8, 12, 30, 0.92) !important;
+            color: rgba(245, 248, 255, 0.98) !important;
+          }
+
+          .stTextInput input::placeholder,
+          .stNumberInput input::placeholder {
+            color: rgba(160, 175, 210, 0.75) !important;
+          }
+
+          /* Main-area select trigger (not the portal menu) */
+          section.main .stSelectbox div[data-baseweb="select"] span {
+            color: rgba(245, 248, 255, 0.95) !important;
+          }
+
+          /* Secondary buttons */
+          .stButton > button[kind="secondary"] {
+            background: rgba(255, 255, 255, 0.1) !important;
+            color: rgba(245, 248, 255, 0.96) !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+          }
+
+          .stButton > button[kind="secondary"]:hover {
+            background: rgba(255, 255, 255, 0.16) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+          }
+
+          /* Alerts — dark glass + explicit light text (Streamlit defaults are dark gray on our dark bg) */
+          div[data-baseweb="notification"],
+          .stAlert,
+          [data-testid="stAlert"] {
+            border-radius: 12px !important;
+            border: 1px solid var(--fdc-glass-border) !important;
+            background: rgba(18, 24, 52, 0.88) !important;
+            backdrop-filter: blur(10px);
+            color: rgba(225, 232, 255, 0.92) !important;
+          }
+
+          .stAlert p,
+          .stAlert li,
+          .stAlert span,
+          .stAlert div[data-testid="stMarkdownContainer"] p,
+          [data-testid="stAlert"] p,
+          [data-testid="stAlert"] li,
+          [data-testid="stAlert"] span {
+            color: rgba(225, 232, 255, 0.92) !important;
+          }
+
+          /* Expanders — dark glass header (fixes white bar + invisible label text) */
+          .streamlit-expander,
+          div[data-testid="stExpander"] {
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 14px !important;
+            overflow: hidden;
+            background: rgba(10, 14, 32, 0.45) !important;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+          }
+
+          details.streamlit-expander summary,
+          .streamlit-expanderHeader,
+          div[data-testid="stExpander"] summary,
+          div[data-testid="stExpander"] details summary {
+            font-weight: 600 !important;
+            background: rgba(16, 20, 44, 0.92) !important;
+            background-color: rgba(16, 20, 44, 0.92) !important;
+            color: rgba(248, 250, 255, 0.98) !important;
+            border: none !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+
+          .streamlit-expanderHeader,
+          .streamlit-expanderHeader p,
+          .streamlit-expanderHeader span,
+          details.streamlit-expander summary,
+          details.streamlit-expander summary p,
+          details.streamlit-expander summary span,
+          div[data-testid="stExpander"] summary,
+          div[data-testid="stExpander"] summary *,
+          details[data-testid="stExpander"] summary,
+          details[data-testid="stExpander"] summary * {
+            color: rgba(248, 250, 255, 0.98) !important;
+            -webkit-text-fill-color: rgba(248, 250, 255, 0.98) !important;
+          }
+
+          .streamlit-expander summary svg,
+          div[data-testid="stExpander"] summary svg,
+          details[data-testid="stExpander"] summary svg {
+            fill: rgba(248, 250, 255, 0.9) !important;
+            color: rgba(248, 250, 255, 0.9) !important;
+          }
+
+          /* Newer Streamlit: expander trigger can be a button */
+          [data-testid="stExpander"] button,
+          .streamlit-expander [data-testid="collapsedControl"] {
+            background: rgba(16, 20, 44, 0.92) !important;
+            color: rgba(248, 250, 255, 0.98) !important;
+          }
+
+          .streamlit-expanderContent {
+            color: rgba(205, 215, 240, 0.92) !important;
+            background: rgba(6, 10, 26, 0.55) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+          }
+
+          .streamlit-expanderContent p,
+          .streamlit-expanderContent li,
+          .streamlit-expanderContent .stMarkdown p {
+            color: rgba(205, 215, 240, 0.92) !important;
+          }
+
+          /* Widget labels & helper text */
+          label[data-testid="stWidgetLabel"],
+          label[data-testid="stWidgetLabel"] p {
+            color: rgba(230, 238, 255, 0.92) !important;
+          }
+
+          .stTooltipIcon,
+          [data-testid="stWidgetLabel"] svg {
+            fill: rgba(180, 195, 230, 0.85) !important;
+          }
+
+          section.main h4 {
+            color: rgba(245, 248, 255, 0.96) !important;
+          }
+
+          /* Progress bar */
+          .stProgress > div > div {
+            background: linear-gradient(90deg, #06b6d4, #a855f7) !important;
+            border-radius: 8px;
+          }
+
           .fdc-card {
-            border: 1px solid rgba(37, 99, 235, 0.2);
+            border: 1px solid var(--fdc-glass-border);
+            border-radius: 16px;
+            padding: 1.25rem 1.5rem;
+            background: var(--fdc-glass);
+            backdrop-filter: blur(18px) saturate(1.2);
+            -webkit-backdrop-filter: blur(18px) saturate(1.2);
+            margin-bottom: 1.25rem;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+          }
+
+          .fdc-card strong {
+            color: var(--fdc-text);
+          }
+
+          /* Dataframes / tables in Methods */
+          section.main [data-testid="stDataFrame"], section.main [data-testid="stTable"] {
             border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--fdc-glass-border);
+          }
+
+          /* Images (EDA) — subtle frame */
+          section.main [data-testid="stImage"] {
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid var(--fdc-glass-border);
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35);
+          }
+
+          /* Dividers */
+          hr {
+            border-color: rgba(255, 255, 255, 0.08) !important;
+          }
+
+          /* Checkbox / radio */
+          .stCheckbox label span,
+          .stRadio label span,
+          .stCheckbox span[data-testid],
+          .stRadio span[data-testid] {
+            color: rgba(225, 232, 255, 0.9) !important;
+          }
+
+          /* Forms */
+          [data-testid="stForm"] {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
             padding: 1rem 1.25rem;
-            background: linear-gradient(135deg, rgba(37,99,235,0.06), rgba(255,255,255,0));
-            margin-bottom: 1rem;
+            background: rgba(12, 16, 38, 0.45);
           }
         </style>
         """,
@@ -401,7 +1005,7 @@ def tab_eda() -> None:
     summary_path = REPORTS_DIR / "eda_summary.md"
     if summary_path.is_file():
         with st.expander("EDA findings summary (rubric-aligned)", expanded=True):
-            st.markdown(summary_path.read_text(encoding="utf-8"))
+            _render_eda_summary_markdown(summary_path.read_text(encoding="utf-8"))
     else:
         st.info(
             "No EDA findings summary found yet. Run `python scripts/run_eda.py` to generate `reports/eda_summary.md`."
