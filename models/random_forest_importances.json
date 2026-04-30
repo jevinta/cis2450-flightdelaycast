@@ -1,102 +1,102 @@
 [
   {
     "feature": "num__dep_hour",
-    "importance": 0.10455963804736265
-  },
-  {
-    "feature": "num__w_tmax",
-    "importance": 0.0998177798857839
+    "importance": 0.16942127656225978
   },
   {
     "feature": "num__w_tmin",
-    "importance": 0.08394865227537923
+    "importance": 0.07684976030972246
   },
   {
-    "feature": "num__w_wspd",
-    "importance": 0.08357552579009617
-  },
-  {
-    "feature": "num__w_prcp",
-    "importance": 0.07754686811021415
-  },
-  {
-    "feature": "num__dw_wspd",
-    "importance": 0.07041233049067655
-  },
-  {
-    "feature": "num__dw_tmax",
-    "importance": 0.06892582996555499
+    "feature": "num__w_tmax",
+    "importance": 0.07624942736329983
   },
   {
     "feature": "num__dw_tmin",
-    "importance": 0.06608925216933641
+    "importance": 0.07112216245118567
+  },
+  {
+    "feature": "num__dw_tmax",
+    "importance": 0.06277020418331065
   },
   {
     "feature": "num__DISTANCE",
-    "importance": 0.05993421714331225
+    "importance": 0.06121259619935829
+  },
+  {
+    "feature": "num__dw_wspd",
+    "importance": 0.06097071603113031
+  },
+  {
+    "feature": "num__month",
+    "importance": 0.05931418831545546
+  },
+  {
+    "feature": "num__w_wspd",
+    "importance": 0.05860044287475032
+  },
+  {
+    "feature": "num__w_prcp",
+    "importance": 0.04957057777566795
   },
   {
     "feature": "num__dw_prcp",
-    "importance": 0.050445029746986475
+    "importance": 0.03799962827630045
   },
   {
     "feature": "num__day_of_week",
-    "importance": 0.04121091678554472
+    "importance": 0.03277336205179288
   },
   {
     "feature": "cat__OP_CARRIER_DL",
-    "importance": 0.010821859624522624
-  },
-  {
-    "feature": "cat__OP_CARRIER_UA",
-    "importance": 0.00919988729951542
+    "importance": 0.00918543065692081
   },
   {
     "feature": "cat__ORIGIN_infrequent_sklearn",
-    "importance": 0.008177336321865252
-  },
-  {
-    "feature": "cat__OP_CARRIER_AA",
-    "importance": 0.007632582880709191
+    "importance": 0.007939281324381901
   },
   {
     "feature": "cat__OP_CARRIER_WN",
-    "importance": 0.00735349879217358
+    "importance": 0.007177506498372471
   },
   {
     "feature": "cat__DEST_infrequent_sklearn",
-    "importance": 0.00680183482162451
+    "importance": 0.0071144292066834805
   },
   {
-    "feature": "cat__ORIGIN_ORD",
-    "importance": 0.005197397842128226
+    "feature": "cat__OP_CARRIER_UA",
+    "importance": 0.006347452885801917
   },
   {
-    "feature": "cat__DEST_DFW",
-    "importance": 0.0050265092795263484
+    "feature": "cat__OP_CARRIER_AA",
+    "importance": 0.006262923777056562
+  },
+  {
+    "feature": "cat__OP_CARRIER_F9",
+    "importance": 0.004612096420804204
   },
   {
     "feature": "cat__ORIGIN_DFW",
-    "importance": 0.004220691617550514
+    "importance": 0.004481990208487126
+  },
+  {
+    "feature": "cat__DEST_DFW",
+    "importance": 0.004426690781606709
+  },
+  {
+    "feature": "cat__DEST_SFO",
+    "importance": 0.00385947459600022
   },
   {
     "feature": "cat__OP_CARRIER_AS",
-    "importance": 0.003346877094386799
+    "importance": 0.0035196013989083528
   },
   {
-    "feature": "cat__DEST_DEN",
-    "importance": 0.003265118161486381
+    "feature": "cat__ORIGIN_ORD",
+    "importance": 0.002911608738995567
   },
   {
     "feature": "cat__DEST_ORD",
-    "importance": 0.00326182564685552
-  },
-  {
-    "feature": "cat__OP_CARRIER_B6",
-    "importance": 0.0028019160898519135
-  },
-  {
-    "feature": "cat__ORIGIN_ATL",
-    "importance": 0.002789181195993908
+    "importance": 0.0028535077625049996
   }
 ]
