@@ -276,7 +276,7 @@ def _train_rf(
     pred = pipe.predict(X_test)
     metrics = _metrics(y_test, pred, n_train=len(X_train), n_test=len(X_test))
 
-    X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
+    _, X_val, _, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
     print("Threshold tuning for Random Forest on validation split …")
     best_thr, thr_val_metrics = _find_optimal_threshold(pipe, X_val, y_val)
     probas_test = pipe.predict_proba(X_test)[:, 1]
@@ -332,7 +332,7 @@ def _train_hgb(
     pred = pipe.predict(X_test)
     metrics = _metrics(y_test, pred, n_train=len(X_train), n_test=len(X_test))
 
-    X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
+    _, X_val, _, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
     print("Threshold tuning for Histogram Gradient Boosting on validation split …")
     best_thr, thr_val_metrics = _find_optimal_threshold(pipe, X_val, y_val)
     probas_test = pipe.predict_proba(X_test)[:, 1]
