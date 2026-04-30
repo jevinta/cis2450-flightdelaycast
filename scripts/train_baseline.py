@@ -27,7 +27,7 @@ from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
 from flightdelaycast.model_features import drop_highly_correlated_numeric, feature_columns  # noqa: E402
 
-# Regularization strength C for saga + sparse OHE; search log-scale (imbalanced F1 objective).
+# Regularization strength for logistic regression (log-scale search).
 LOGISTIC_PARAM_DIST = {
     "clf__C": loguniform(1e-4, 1e2),
 }
@@ -41,7 +41,7 @@ def _tune_logistic(
     n_iter: int,
     seed: int,
 ) -> tuple[Pipeline, dict]:
-    """RandomizedSearchCV on train only; scoring=F1 for imbalance alignment with tree tuning."""
+    """Tune logistic C with RandomizedSearchCV on the training split."""
     search = RandomizedSearchCV(
         pipe,
         param_distributions=LOGISTIC_PARAM_DIST,

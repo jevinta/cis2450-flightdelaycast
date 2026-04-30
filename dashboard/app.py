@@ -571,7 +571,7 @@ def tab_methods() -> None:
     st.markdown("## Difficulty Concepts")
     st.caption("Three advanced techniques applied in this project, with justification, implementation details, and measured results.")
 
-    # ── 1. Ensemble Models ──────────────────────────────────────────────────────
+    # 1. Ensemble models
     st.markdown("---")
     st.subheader("1. Ensemble Models")
     st.markdown(
@@ -626,7 +626,7 @@ def tab_methods() -> None:
         "`sklearn.ensemble.RandomForestClassifier` and `HistGradientBoostingClassifier`."
     )
 
-    # ── 2. Feature Importance & Selection ───────────────────────────────────────
+    # 2. Feature importance and selection
     st.markdown("---")
     st.subheader("2. Feature Importance & Feature Selection")
     st.markdown(
@@ -682,7 +682,7 @@ def tab_methods() -> None:
         "Results saved to `models/random_forest_feature_selection.json`."
     )
 
-    # ── 3. Hyperparameter Tuning ─────────────────────────────────────────────────
+    # 3. Hyperparameter tuning
     st.markdown("---")
     st.subheader("3. Hyperparameter Tuning (RandomizedSearchCV)")
     st.markdown(
@@ -751,7 +751,7 @@ def tab_methods() -> None:
         "`sklearn.model_selection.RandomizedSearchCV` (on by default; pass `--no-tune` to skip)."
     )
 
-    # ── Conclusion ────────────────────────────────────────────────────────────────
+    # Conclusion
     st.markdown("---")
     st.subheader("Conclusion")
 

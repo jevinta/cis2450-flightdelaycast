@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Exploratory plots + summary stats -> reports/figures and reports/eda_summary.md.
-
-Data loading uses **Polars** for fast columnar CSV ingestion — BTS flight data can
-grow to millions of rows across multi-month pulls, and Polars' lazy scan reads only
-the columns required, significantly reducing I/O vs. a full pandas read.
-
-EDA aggregations (delay rate by hour, by carrier) are expressed as **SQL** queries
-against an in-memory SQLite database.  GROUP BY is the natural language for these
-summaries, and the explicit SQL makes each question reproducible and auditable.
-"""
+"""Build EDA figures and summary markdown from processed flights."""
 
 from __future__ import annotations
 
@@ -56,8 +47,7 @@ def main() -> None:
         print("Run: python scripts/build_processed.py", file=sys.stderr)
         raise SystemExit(1)
 
-    # ── Load with Polars (columnar, lazy scan; converts to pandas for plotting) ──
-    # Selecting only the columns needed for EDA avoids loading 100+ BTS fields.
+    # Load only the columns we need, then convert to pandas for plotting.
     _EDA_COLS = [
         "dep_hour", "month", "day_of_week", "DISTANCE",
         "OP_CARRIER", "is_delayed", "w_tmax", "w_prcp",
@@ -69,9 +59,7 @@ def main() -> None:
     print(f"Loaded {len(df_pl):,} rows via Polars (columns: {select_cols})")
     df = df_pl.to_pandas()
 
-    # ── In-memory SQLite for SQL-based aggregations ───────────────────────────
-    # Writing to an in-memory DB lets us express GROUP BY summaries in plain SQL,
-    # which is the natural language for per-hour / per-carrier aggregations.
+    # Use in-memory SQLite for straightforward GROUP BY aggregations.
     conn = sqlite3.connect(":memory:")
     df.to_sql("flights", conn, index=False, if_exists="replace")
 
@@ -96,14 +84,14 @@ def main() -> None:
         "- Key feature groups: schedule (`dep_hour`, `month`, `day_of_week`), route (`ORIGIN`, `DEST`, `DISTANCE`), carrier (`OP_CARRIER`), optional weather (`w_*`, `dw_*`)."
     )
     summary_lines.append(
-        "- Roadmap impact: confirms that this is a classification task with mixed numeric and categorical predictors."
+        "- This confirms a mixed-feature classification setup (numeric + categorical predictors)."
     )
     summary_lines.append("")
 
     print(f"Rows: {len(df):,}")
     print(f"Delay rate P(arr_delay > 15 min): {delay_rate:.3f}")
 
-    # ── Summary statistics table ──────────────────────────────────────────────
+    # Summary statistics table.
     stat_cols = [c for c in ["dep_hour", "month", "day_of_week", "DISTANCE", "w_tmax", "w_prcp", "w_wspd"] if c in df.columns]
     if stat_cols:
         desc = df[stat_cols].describe().loc[["count", "mean", "std", "min", "25%", "50%", "75%", "max"]]
@@ -135,7 +123,7 @@ def main() -> None:
         "- Interpretation: class imbalance is present, so model evaluation should emphasize precision/recall/F1 (not accuracy alone)."
     )
     summary_lines.append(
-        "- Roadmap impact: use imbalance-aware evaluation and keep probability outputs for threshold tuning."
+        "- We evaluate with precision/recall/F1 and keep probability outputs for threshold tuning."
     )
     summary_lines.append("")
 
@@ -148,7 +136,7 @@ def main() -> None:
     fig.savefig(args.out_dir / "01_class_balance.png", dpi=150)
     plt.close(fig)
 
-    # SQL: hourly delay rate — GROUP BY is the natural expression of this question
+    # SQL query: hourly delay rate.
     hourly_sql = pd.read_sql(
         """
         SELECT CAST(dep_hour AS INTEGER) AS dep_h,
@@ -188,11 +176,11 @@ def main() -> None:
                 "- Correlation matrix helps flag redundant numeric predictors before modeling."
             )
             summary_lines.append(
-                "- Roadmap impact: retain hour and carrier features; monitor multicollinearity among numeric variables."
+                "- Keep hour and carrier features, and monitor numeric multicollinearity."
             )
             summary_lines.append("")
 
-    # SQL: carrier delay rate — top 12 by volume, then sorted by delay rate for chart
+    # SQL query: delay rate by carrier (top 12 by volume).
     carrier_sql = pd.read_sql(
         """
         SELECT   OP_CARRIER,
@@ -261,7 +249,7 @@ def main() -> None:
             "- Handling policy: keep valid operational extremes (e.g., long-distance flights, extreme weather) and rely on robust models/tree splits; add clipping only if validation metrics degrade."
         )
         summary_lines.append(
-            "- Roadmap impact: preserves real rare events while keeping a documented mitigation strategy."
+            "- This keeps real rare events in the dataset while documenting mitigation options."
         )
         summary_lines.append("")
 

@@ -12,7 +12,8 @@ from meteostat import Daily, Stations
 from meteostat.interface.base import Base
 from tqdm import tqdm
 
-# Default Meteostat cache is ~/.meteostat/cache (fails in sandboxes / read-only home).
+# Default Meteostat cache is under ~/.meteostat/cache.
+# Use a local project cache to avoid permission issues in sandboxed environments.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_METEOSTAT_CACHE = _REPO_ROOT / ".cache" / "meteostat" / "cache"
 if os.environ.get("FLIGHTDELAYCAST_USE_LOCAL_METEOSTAT_CACHE", "1") not in ("0", "false", "False"):
