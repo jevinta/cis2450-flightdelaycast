@@ -1,11 +1,11 @@
 {
-  "accuracy": 0.6076666666666667,
-  "precision": 0.2900822001997388,
-  "recall": 0.5988897700237906,
-  "f1": 0.390849808508436,
+  "accuracy": 0.6349333333333333,
+  "precision": 0.34129089301503096,
+  "recall": 0.6063115807511067,
+  "f1": 0.43674141123225674,
   "n_train": 120000,
   "n_test": 30000,
-  "delay_rate_test": 0.21016666666666667,
+  "delay_rate_test": 0.23343333333333333,
   "corr_drop_threshold": 0.9,
   "dropped_high_corr_numeric": [],
   "hyperparameter_tuning": "RandomizedSearchCV(cv=3, scoring=f1, n_iter=15)"
