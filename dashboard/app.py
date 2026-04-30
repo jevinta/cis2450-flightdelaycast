@@ -6,6 +6,7 @@ import html
 import json
 import re
 import sys
+import time as pytime
 from datetime import date, time, timedelta
 from pathlib import Path
 
@@ -89,13 +90,12 @@ def _classifier_select_label(model_id: str) -> str:
     return f"{base} ✓" if _bundle_files_ready(b) else f"{base} — not trained yet"
 
 
-# Short captions for EDA PNGs (edit as your story evolves)
 EDA_CAPTIONS: dict[str, str] = {
-    "01_class_balance": "Most flights are on time — class imbalance matters for metrics and modeling choices.",
-    "02_delay_rate_by_hour": "Delay rate varies by scheduled departure hour; time-of-day is a strong signal.",
-    "03_delay_rate_by_carrier": "Carriers differ systematically; airline is a useful categorical feature.",
-    "04_correlation_numeric": "Relationships among numeric fields inform feature scaling and redundancy.",
-    "05_outlier_boxplots": "IQR-based outlier scan highlights extreme values and informs handling policy.",
+    "01_class_balance": "About 1 in 5 flights is delayed. Because on-time flights dominate, a model that just guesses 'on time' every time would look 80% accurate — so we use a different measure of success that actually rewards catching real delays.",
+    "02_delay_rate_by_hour": "Morning flights are far less likely to be delayed than evening ones, with risk peaking near 7 PM at almost 30%. Delays accumulate across the day as aircraft and crews fall behind schedule.",
+    "03_delay_rate_by_carrier": "Some airlines are consistently more punctual than others — a gap of about 15 percentage points separates the best and worst performers. Airline identity turns out to be a meaningful predictor of delay risk.",
+    "04_correlation_numeric": "This shows how our numeric inputs relate to each other and to the delay outcome. We use this to make sure we're not feeding the model the same information twice, which could skew its estimates.",
+    "05_outlier_boxplots": "Every dataset has edge cases — unusually long routes, extreme weather days. This checks how common they are. We kept them in the model since they represent real situations travelers face.",
 }
 
 SPEAKER_OVERVIEW = """
@@ -212,6 +212,74 @@ def _risk_tone(p: float, *, threshold: float = 0.5) -> tuple[str, str]:
     return "Lower delay risk", "🟢"
 
 
+def _airplane_loading(duration_s: float = 1.15) -> None:
+    """Centered airplane loader with animated circular ring."""
+    overlay = st.empty()
+    overlay.markdown(
+        """
+        <style>
+          .fdc-loader-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            pointer-events: none;
+            background: rgba(3, 8, 24, 0.22);
+            backdrop-filter: blur(2px);
+          }
+          .fdc-loader-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.85rem;
+          }
+          .fdc-loader-ring {
+            width: 112px;
+            height: 112px;
+            border-radius: 999px;
+            border: 4px solid rgba(255, 255, 255, 0.28);
+            border-top-color: #ffffff;
+            border-right-color: #7dd3fc;
+            animation: fdc-spin 0.9s linear infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.15), 0 10px 30px rgba(0,0,0,0.35);
+            background: rgba(10, 18, 42, 0.55);
+          }
+          .fdc-loader-plane {
+            font-size: 2.15rem;
+            line-height: 1;
+            filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+          }
+          .fdc-loader-text {
+            color: #f8fbff;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+          }
+          @keyframes fdc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        </style>
+        <div class="fdc-loader-overlay">
+          <div class="fdc-loader-wrap">
+            <div class="fdc-loader-ring">
+              <div class="fdc-loader-plane">✈️</div>
+            </div>
+            <div class="fdc-loader-text">Running prediction...</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    pytime.sleep(max(duration_s, 0.2))
+    overlay.empty()
+
+
 def _inject_style() -> None:
     css = (_DASHBOARD_DIR / "style.css").read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
@@ -249,7 +317,7 @@ def tab_overview() -> None:
             """
         )
 
-    with st.expander("Speaker notes — Overview tab", expanded=False):
+    with st.expander("Overview tab", expanded=False):
         st.markdown(SPEAKER_OVERVIEW)
 
     st.divider()
@@ -404,6 +472,8 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, thre
             st.error(e)
         return
 
+    _airplane_loading()
+
     assert distance_mi is not None
     row = prediction_dataframe(
         num_cols=num_cols,
@@ -459,40 +529,40 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, thre
             "P(delayed) is from the trained classifier on historical BTS-style features, not live ATC data."
         )
 
-    with st.expander("Speaker notes — Live demo", expanded=False):
-        st.markdown(SPEAKER_DEMO)
+_FIGURE_TITLES: dict[str, str] = {
+    "01_class_balance": "How Often Do Delays Happen?",
+    "02_delay_rate_by_hour": "Delay Risk by Time of Day",
+    "03_delay_rate_by_carrier": "Delay Risk by Airline",
+    "04_correlation_numeric": "How Our Inputs Relate to Each Other",
+    "05_outlier_boxplots": "Checking for Unusual Values",
+}
 
 
 def tab_eda() -> None:
     st.markdown(
-        "Figures produced by `scripts/run_eda.py`. Commit `reports/figures/*.png` so **Streamlit Community Cloud** can display them."
+        "Key patterns we found in the data — what drives delays, who they affect, and how often they happen."
     )
     summary_path = REPORTS_DIR / "eda_summary.md"
     if summary_path.is_file():
-        with st.expander("EDA findings summary (rubric-aligned)", expanded=True):
+        with st.expander("Data findings summary", expanded=True):
             _render_eda_summary_markdown(summary_path.read_text(encoding="utf-8"))
-    else:
-        st.info(
-            "No EDA findings summary found yet. Run `python scripts/run_eda.py` to generate `reports/eda_summary.md`."
-        )
 
     st.divider()
     fig_dir = REPORTS_FIGURES
     if not fig_dir.is_dir():
-        st.info(f"No figures directory at `{fig_dir}` yet.")
         return
 
     paths = sorted(fig_dir.glob("*.png"))
     if not paths:
-        st.info(f"No `*.png` files in `{fig_dir}` yet.")
         return
 
     for path in paths:
         key = path.stem
-        title = key.replace("_", " ").title()
-        caption = EDA_CAPTIONS.get(key, "Discuss what pattern supports your modeling choices.")
+        title = _FIGURE_TITLES.get(key, key.replace("_", " ").title())
+        caption = EDA_CAPTIONS.get(key, "")
         st.subheader(title)
-        st.caption(caption)
+        if caption:
+            st.caption(caption)
         st.image(str(path), use_container_width=True)
         st.divider()
 
