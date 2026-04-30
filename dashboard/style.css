@@ -88,14 +88,13 @@ html, body {
   z-index: 1;
 }
 
-/* Keep Streamlit header visible so sidebar toggle remains accessible */
+/* Keep Streamlit header in the DOM so sidebar toggle remains accessible */
 [data-testid="stHeader"] {
   background: rgba(8, 10, 24, 0.35) !important;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--fdc-glass-border);
 }
-
 [data-testid="stDecoration"] {
   display: none !important;
 }
@@ -352,6 +351,41 @@ section.main .stCaption, section.main [data-testid="stCaptionContainer"] {
 
 [data-testid="stSidebar"] [data-baseweb="select"] span {
   color: rgba(245, 248, 255, 0.95) !important;
+}
+
+/* Sidebar collapse/expand toggle — always white arrow on dark bg */
+
+/* Open sidebar: collapse button (stSidebarCollapseButton, inside sidebar) */
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebarCollapseButton"] button {
+  background: transparent !important;
+  border: none !important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Closed sidebar: expand button (stExpandSidebarButton, inside header toolbar) */
+[data-testid="stExpandSidebarButton"] {
+  background: rgba(14, 18, 40, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 10px !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+[data-testid="stExpandSidebarButton"] button {
+  background: transparent !important;
+  border: none !important;
+}
+[data-testid="stExpandSidebarButton"] button:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Force white icon color on ALL descendants — overrides Emotion inline color prop */
+[data-testid="stSidebarCollapseButton"] *,
+[data-testid="stExpandSidebarButton"] * {
+  color: #ffffff !important;
+  fill: #ffffff !important;
 }
 
 /* Tabs — pill glass bar */
