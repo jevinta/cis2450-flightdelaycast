@@ -6,7 +6,7 @@
   --fdc-glow-cyan: rgba(0, 240, 255, 0.45);
   --fdc-glow-magenta: rgba(255, 0, 200, 0.35);
   --fdc-text: rgba(245, 248, 255, 0.95);
-  --fdc-muted: rgba(200, 210, 230, 0.75);
+  --fdc-muted: rgba(224, 233, 250, 0.9);
   --fdc-mesh:
     radial-gradient(ellipse 90% 60% at 12% 25%, rgba(0, 220, 255, 0.38) 0%, transparent 52%),
     radial-gradient(ellipse 70% 50% at 88% 12%, rgba(255, 0, 180, 0.32) 0%, transparent 48%),
@@ -68,15 +68,117 @@ html, body {
   background-size: 180px 180px;
 }
 
+/* Small decorative airplane in page corner (all tabs/pages) */
+.stApp::after {
+  content: "✈";
+  position: fixed;
+  right: 1.15rem;
+  bottom: 0.95rem;
+  z-index: 2;
+  pointer-events: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.6);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.35);
+  transform: rotate(-18deg);
+}
+
 [data-testid="stAppViewContainer"] {
   position: relative;
   z-index: 1;
 }
 
-/* Hide default Streamlit top chrome (thin header strip above tabs/title) */
-[data-testid="stHeader"],
+/* Keep Streamlit header visible so sidebar toggle remains accessible */
+[data-testid="stHeader"] {
+  background: rgba(8, 10, 24, 0.35) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--fdc-glass-border);
+}
+
 [data-testid="stDecoration"] {
   display: none !important;
+}
+
+/* Always show sidebar trigger when sidebar is collapsed */
+[data-testid="collapsedControl"],
+[data-testid="collapsedControl"] button {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: fixed !important;
+  top: 0.9rem !important;
+  left: 0.85rem !important;
+  z-index: 1001 !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  border-radius: 10px !important;
+  border: 2px solid #ffffff !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.45), 0 0 0 2px #ffffff !important;
+  filter: none !important;
+  transform: none !important;
+  transition: none !important;
+  mix-blend-mode: normal !important;
+  -webkit-text-fill-color: #0f172a !important;
+}
+
+/* Streamlit can dim/hide this control until hover; force fully visible in ALL states */
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] *,
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="stBaseButton-headerNoPadding"],
+[data-testid="stBaseButton-headerNoPadding"] *,
+button[aria-label*="sidebar" i],
+button[title*="sidebar" i] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+}
+
+[data-testid="collapsedControl"]:not(:hover),
+[data-testid="collapsedControl"] button:not(:hover),
+[data-testid="collapsedControl"]:hover,
+[data-testid="collapsedControl"]:focus,
+[data-testid="collapsedControl"]:active,
+[data-testid="collapsedControl"] button:hover,
+[data-testid="collapsedControl"] button:focus,
+[data-testid="collapsedControl"] button:active,
+[data-testid="collapsedControl"][aria-expanded="false"],
+[data-testid="collapsedControl"][aria-expanded="true"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 8px 24px rgba(2, 6, 23, 0.45), 0 0 0 2px #ffffff !important;
+  filter: none !important;
+  transform: none !important;
+}
+
+/* Defensive overrides for parent wrappers that may fade children until hover */
+header [data-testid="collapsedControl"],
+header [data-testid="collapsedControl"] button,
+[data-testid="stSidebarCollapsedControl"],
+[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="stHeader"] [data-testid="collapsedControl"],
+[data-testid="stHeader"] [data-testid="collapsedControl"] button,
+[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"],
+[data-testid="stHeader"] [data-testid="stSidebarCollapsedControl"] button,
+[data-testid="stHeader"] [data-testid="stBaseButton-headerNoPadding"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+  filter: none !important;
+}
+
+[data-testid="collapsedControl"] svg,
+[data-testid="collapsedControl"] *,
+[data-testid="collapsedControl"] button svg,
+[data-testid="collapsedControl"] button * {
+  color: #0f172a !important;
+  fill: #0f172a !important;
+  stroke: #0f172a !important;
+  opacity: 1 !important;
 }
 
 section.main {
@@ -109,7 +211,8 @@ section.main h2, section.main h3 {
 
 section.main .stMarkdown p,
 section.main .stMarkdown li {
-  color: var(--fdc-muted);
+  color: rgba(236, 242, 255, 0.95);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
 }
 
 section.main .stMarkdown strong {
@@ -212,7 +315,7 @@ section.main .block-container table td {
 }
 
 section.main .stCaption, section.main [data-testid="stCaptionContainer"] {
-  color: var(--fdc-muted) !important;
+  color: rgba(216, 228, 250, 0.92) !important;
 }
 
 /* Sidebar — glass panel */
@@ -293,8 +396,24 @@ div[data-testid="stMetricValue"] {
   color: #a5f3fc !important;
 }
 
-div[data-testid="stMetricLabel"] label {
-  color: var(--fdc-muted) !important;
+div[data-testid="stMetricLabel"] label,
+div[data-testid="stMetricLabel"] p,
+div[data-testid="stMetricLabel"] span,
+div[data-testid="stMetricLabel"] div {
+  color: rgba(245, 248, 255, 0.98) !important;
+  -webkit-text-fill-color: rgba(245, 248, 255, 0.98) !important;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
+}
+
+/* Streamlit versions vary: ensure any metric-label text node stays light */
+[data-testid="stMetric"] label,
+[data-testid="stMetric"] label p,
+[data-testid="stMetric"] label span,
+[data-testid="stMetric"] p,
+[data-testid="stMetric"] small,
+[data-testid="stMetric"] div:not([data-testid="stMetricValue"]) {
+  color: rgba(245, 248, 255, 0.98) !important;
+  -webkit-text-fill-color: rgba(245, 248, 255, 0.98) !important;
 }
 
 /* Primary buttons */

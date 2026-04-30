@@ -6,6 +6,7 @@ import html
 import json
 import re
 import sys
+import time as pytime
 from datetime import date, time, timedelta
 from pathlib import Path
 
@@ -211,6 +212,74 @@ def _risk_tone(p: float, *, threshold: float = 0.5) -> tuple[str, str]:
     return "Lower delay risk", "🟢"
 
 
+def _airplane_loading(duration_s: float = 1.15) -> None:
+    """Centered airplane loader with animated circular ring."""
+    overlay = st.empty()
+    overlay.markdown(
+        """
+        <style>
+          .fdc-loader-overlay {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            pointer-events: none;
+            background: rgba(3, 8, 24, 0.22);
+            backdrop-filter: blur(2px);
+          }
+          .fdc-loader-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.85rem;
+          }
+          .fdc-loader-ring {
+            width: 112px;
+            height: 112px;
+            border-radius: 999px;
+            border: 4px solid rgba(255, 255, 255, 0.28);
+            border-top-color: #ffffff;
+            border-right-color: #7dd3fc;
+            animation: fdc-spin 0.9s linear infinite;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.15), 0 10px 30px rgba(0,0,0,0.35);
+            background: rgba(10, 18, 42, 0.55);
+          }
+          .fdc-loader-plane {
+            font-size: 2.15rem;
+            line-height: 1;
+            filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+          }
+          .fdc-loader-text {
+            color: #f8fbff;
+            font-weight: 600;
+            letter-spacing: 0.01em;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.45);
+          }
+          @keyframes fdc-spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        </style>
+        <div class="fdc-loader-overlay">
+          <div class="fdc-loader-wrap">
+            <div class="fdc-loader-ring">
+              <div class="fdc-loader-plane">✈️</div>
+            </div>
+            <div class="fdc-loader-text">Running prediction...</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    pytime.sleep(max(duration_s, 0.2))
+    overlay.empty()
+
+
 def _inject_style() -> None:
     css = (_DASHBOARD_DIR / "style.css").read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
@@ -248,7 +317,7 @@ def tab_overview() -> None:
             """
         )
 
-    with st.expander("Speaker notes — Overview tab", expanded=False):
+    with st.expander("Overview tab", expanded=False):
         st.markdown(SPEAKER_OVERVIEW)
 
     st.divider()
@@ -403,6 +472,8 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, thre
             st.error(e)
         return
 
+    _airplane_loading()
+
     assert distance_mi is not None
     row = prediction_dataframe(
         num_cols=num_cols,
@@ -457,10 +528,6 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, thre
         st.caption(
             "P(delayed) is from the trained classifier on historical BTS-style features, not live ATC data."
         )
-
-    with st.expander("Speaker notes — Live demo", expanded=False):
-        st.markdown(SPEAKER_DEMO)
-
 
 _FIGURE_TITLES: dict[str, str] = {
     "01_class_balance": "How Often Do Delays Happen?",
