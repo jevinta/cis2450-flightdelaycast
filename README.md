@@ -1,23 +1,43 @@
-# Flight Delay Cast (CIS 2450)
+# Flight Delay Cast
 
-Predict whether a U.S. domestic flight will be **delayed** (arrival delay **> 15 minutes**) using BTS flight data and optional daily weather at origin (`w_*`) and destination (`dw_*`) from Meteostat, with an interactive Streamlit dashboard.
+A flight delay predictor built for CIS 2450. Given a U.S. domestic itinerary — origin, destination, airline, and scheduled departure time — it estimates the probability that the flight arrives more than 15 minutes late. Three classifiers are available: logistic regression as a baseline, Random Forest, and Histogram Gradient Boosting.
 
-## Project layout
+The project combines Bureau of Transportation Statistics (BTS) flight records with daily weather from Meteostat at both the departure and arrival airport. The interactive Streamlit dashboard lets you run predictions against any of the trained models, explore the EDA findings, and see a breakdown of the advanced methods used.
 
-```
-data/
-  raw/bts/          BTS CSV downloads (gitignored)
-  raw/airports.csv  IATA airport coordinates
-  processed/        Cleaned + merged tables (.csv.gz, gitignored except .gitkeep)
-models/             Trained .joblib files + metrics/params JSON
-reports/figures/    EDA plots (.png, committed)
-scripts/            Data download, processing, EDA, and training scripts
-src/flightdelaycast/  Shared Python package
-dashboard/          Streamlit app
-notebooks/          Jupyter notebooks (gitignored except .gitkeep)
-```
+---
+
+## Data
+
+**Source:** BTS domestic flight records + Meteostat daily weather summaries.
+
+We trained on 150,000 U.S. domestic flights spanning multiple months and seasons. The target is binary: a flight is "delayed" if its actual arrival is more than 15 minutes late, which matches the industry-standard reportable threshold. About 1 in 5 flights in the dataset is delayed (20.6%), so we optimize for F1 rather than accuracy — a model that always predicts "on time" would hit 80% accuracy but catch zero delays.
+
+Key patterns in the data:
+- Early morning flights (around 6 AM) have delay rates near 10–12%. Risk climbs through the day and peaks around 7 PM at roughly 29%, as scheduling disruptions cascade across aircraft rotations.
+- Airline identity is one of the strongest predictors — about 15 percentage points separate the most and least punctual carriers in the dataset.
+- Great-circle distance, departure hour, month, and day of week are the most important operational features. Weather (especially precipitation and temperature at origin) adds signal for weather-sensitive airports.
+
+---
+
+## Results
+
+| Model | F1 | Accuracy | Precision | Recall |
+|---|---|---|---|---|
+| Logistic regression (baseline) | 0.397 | 0.608 | 0.291 | 0.627 |
+| Random Forest | 0.436 | 0.708 | 0.362 | 0.548 |
+| Histogram gradient boosting | **0.453** | 0.708 | 0.369 | 0.587 |
+
+The ensemble models both outperform logistic regression on F1. HGB edges out Random Forest and has a better precision/recall balance at its tuned threshold (0.55). RF is competitive and provides more interpretable feature importances.
+
+Feature importance analysis (aggregated across one-hot encoded dummies back to original column level) confirmed that departure hour, carrier, origin airport, and distance drive most of the signal — consistent with the EDA findings. Retraining Random Forest on only the top features preserved F1 within 0.003 of the full model.
+
+All three models use **RandomizedSearchCV** (3-fold CV, scoring=F1) for hyperparameter tuning by default. RF and HGB also get a tuned decision threshold to better balance precision and recall on the imbalanced target.
+
+---
 
 ## Setup
+
+Requires Python 3.10+.
 
 ```bash
 python3 -m venv .venv
@@ -26,72 +46,54 @@ pip install -e .
 pip install -r requirements.txt
 ```
 
-## Training pipeline
+---
 
-### 1. Download raw data
+## Running the training pipeline
+
+### 1. Get the raw data
 
 ```bash
-python scripts/download_bts.py --year 2023 --months 1 2 3   # BTS flight CSVs
-python scripts/download_airports.py                           # airports.csv (IATA + coords)
+python scripts/download_bts.py --year 2023 --months 1 2 3
+python scripts/download_airports.py
 ```
 
-### 2. Build processed flights
+BTS CSVs go into `data/raw/bts/`. `airports.csv` (IATA codes + coordinates for distance calculations) goes into `data/raw/`.
+
+### 2. Build the processed dataset
 
 ```bash
-# Flights only (fastest):
+# Fastest — no weather:
 python scripts/build_processed.py
 
 # With origin weather:
 python scripts/build_processed.py --weather
 
-# With origin + destination weather (slow — Meteostat API calls):
+# With origin + destination weather (slower, Meteostat API calls):
 python scripts/build_processed.py --weather --weather-dest --weather-max-pairs 500
 ```
 
-Outputs `data/processed/flights_wrangled.csv.gz` (and weather caches if requested).
+Output: `data/processed/flights_wrangled.csv.gz`. Weather caches are written alongside it if you use those flags.
 
-### 3. Run EDA
+### 3. Explore the data
 
 ```bash
 python scripts/run_eda.py
 ```
 
-Writes `reports/eda_summary.md` and `reports/figures/*.png`.
+Writes `reports/eda_summary.md` and five figures under `reports/figures/`.
 
-### 4. Train models
+### 4. Train
 
 ```bash
-python scripts/train_baseline.py        # Logistic regression
-python scripts/train_tree_models.py     # Random Forest + Histogram Gradient Boosting
+python scripts/train_baseline.py        # logistic regression
+python scripts/train_tree_models.py     # Random Forest + HGB (or --model rf / --model hgb)
 ```
 
-Both scripts run **RandomizedSearchCV** (cv=3, scoring=F1) by default. Pass `--no-tune` for a faster run without hyperparameter search. Individual tree models: `--model rf` or `--model hgb`.
+Both scripts tune hyperparameters by default. Pass `--no-tune` to skip RandomizedSearchCV for faster iteration.
 
-Trained artifacts land in `models/`:
+Artifacts written to `models/`: `.joblib` pipelines, `_features.json` (column lists), `_metrics.json`, `_best_params.json`, and `_threshold.json` for the tree models. The dashboard reads these at runtime.
 
-| File | Description |
-|---|---|
-| `baseline_logistic.joblib` | Logistic regression pipeline |
-| `random_forest.joblib` | Random Forest pipeline |
-| `hist_gradient_boosting.joblib` | HGB pipeline |
-| `*_features.json` | Feature column lists (numeric + categorical) |
-| `*_metrics.json` | Test-set metrics |
-| `*_best_params.json` | Best hyperparameters from RandomizedSearchCV |
-| `*_threshold.json` | Tuned decision threshold (RF and HGB) |
-| `random_forest_feature_selection.json` | Aggregated importances + reduced-model comparison |
-| `tree_models_comparison.json` | Side-by-side RF vs. HGB metrics |
-
-## Model results
-
-Trained on 120 000 flights, tested on 30 000 (~20.6 % delayed).
-
-| Model | F1 | Accuracy | Precision | Recall |
-|---|---|---|---|---|
-| Logistic regression (baseline) | 0.397 | 0.608 | 0.291 | 0.627 |
-| Random Forest | 0.436 | 0.708 | 0.362 | 0.548 |
-| Histogram gradient boosting | **0.453** | 0.708 | 0.369 | 0.587 |
-
-F1 is the primary metric because the target is imbalanced (roughly 4:1 on-time vs. delayed).
+---
 
 ## Dashboard
 
@@ -99,42 +101,47 @@ F1 is the primary metric because the target is imbalanced (roughly 4:1 on-time v
 streamlit run dashboard/app.py
 ```
 
-Four tabs:
+Pick a classifier in the sidebar, then use the four tabs:
 
-- **Overview** — problem framing, data sources, preprocessing summary
-- **Delay risk demo** — enter origin, destination, date, and departure time; pick a classifier in the sidebar; get P(delayed), risk band, heuristic delay minutes, top factors, and a recommendation
-- **EDA snapshots** — class balance, delay rate by hour and carrier, feature correlations, outlier boxplots
-- **Methods** — ensemble models, feature importance & selection, hyperparameter tuning — all backed by the live JSON artifacts in `models/`
+- **Overview** — problem framing, data sources, and a summary of the preprocessing approach
+- **Delay risk demo** — enter origin, destination, flight date, and departure time; get P(delayed), a risk band, heuristic expected delay, top contributing factors, and a recommendation
+- **EDA snapshots** — the five EDA figures with plain-language captions, plus the full EDA findings summary
+- **Methods** — covers the three advanced concepts: ensemble models, feature importance & selection, and hyperparameter tuning, each backed by the live metrics from `models/`
 
-### Weather in the demo
+For flights within 7 days, the demo fetches a live weather forecast from Open-Meteo (free, no API key needed). Beyond that window, a manual scenario picker maps plain-language conditions ("Clear", "Rainy", etc.) to numeric stand-ins. If the loaded model has no weather columns, the weather UI is skipped entirely.
 
-- **Within 7 days:** live forecast fetched automatically from [Open-Meteo](https://open-meteo.com) (free, no API key).
-- **Beyond 7 days:** manual scenario picker ("Clear", "Rainy", etc.) mapped to numeric stand-ins (`dashboard/manual_weather_numeric.py`).
-- **No weather columns in model:** weather UI is skipped; the model runs on operational features only.
+For local preview with the slim dependency set:
 
-### Sidebar classifier selector
+```bash
+pip install -r requirements-app.txt
+streamlit run dashboard/app.py
+```
 
-The sidebar shows all three classifiers. Those with `.joblib` + `_features.json` in `models/` are selectable; missing ones display a training hint.
+---
 
-## Shared package (`src/flightdelaycast`)
+## Project structure
 
-| Module | Purpose |
-|---|---|
-| `config.py` | Paths and `DELAY_THRESHOLD_MINUTES` (15) |
-| `cleaning.py` | BTS column renaming and type coercions |
-| `wrangle.py` | Merge flights with weather, derive features |
-| `model_features.py` | Feature column selection, high-correlation drop, `prediction_dataframe` |
-| `meteostat_daily.py` | Fetch daily weather summaries from Meteostat |
-| `weather_origin.py` | Build/cache origin weather table |
-| `weather_destination.py` | Build/cache destination weather table |
-| `route_distance.py` | Great-circle distance between IATA airports |
-
-## Deploying to Streamlit Community Cloud
-
-1. Push this repo (with `models/` artifacts and `reports/figures/`) to GitHub.
-2. Go to [streamlit.io/cloud](https://streamlit.io/cloud) → New app → pick repo → **Main file:** `dashboard/app.py` → **Advanced** → Python 3.10+ → **Requirements file:** `requirements-app.txt`.
-3. Wait for build; share the public URL.
-
-`requirements-app.txt` is a slim install (no Meteostat, no Jupyter) suitable for cloud hosts. For local dev use `requirements.txt`.
-
-**Alternatives:** Render or Railway — start command `streamlit run dashboard/app.py`, requirements file `requirements-app.txt`.
+```
+data/
+  raw/bts/              BTS CSV downloads (gitignored)
+  raw/airports.csv      IATA airport lookup with lat/lon
+  processed/            Cleaned and merged tables (gitignored)
+models/                 Trained .joblib files and JSON metrics/params
+reports/
+  eda_summary.md        Written by run_eda.py
+  figures/              EDA plots (committed)
+scripts/
+  download_bts.py       Fetch BTS flight CSVs
+  download_airports.py  Fetch airports.csv
+  build_processed.py    Merge flights + weather into training data
+  run_eda.py            Generate EDA summary and figures
+  train_baseline.py     Train and tune logistic regression
+  train_tree_models.py  Train and tune RF and HGB
+src/flightdelaycast/    Shared package (cleaning, wrangling, feature engineering, weather fetching)
+dashboard/
+  app.py                Streamlit app entry point
+  weather_policy.py     Open-Meteo forecast fetching and weather UI mode logic
+  manual_weather_numeric.py  Maps scenario labels to numeric weather stand-ins
+  prediction_explain.py     Narrative and factor generation for the demo output
+  style.css             Custom dashboard styles
+```
