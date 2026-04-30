@@ -89,13 +89,12 @@ def _classifier_select_label(model_id: str) -> str:
     return f"{base} ✓" if _bundle_files_ready(b) else f"{base} — not trained yet"
 
 
-# Short captions for EDA PNGs (edit as your story evolves)
 EDA_CAPTIONS: dict[str, str] = {
-    "01_class_balance": "Most flights are on time — class imbalance matters for metrics and modeling choices.",
-    "02_delay_rate_by_hour": "Delay rate varies by scheduled departure hour; time-of-day is a strong signal.",
-    "03_delay_rate_by_carrier": "Carriers differ systematically; airline is a useful categorical feature.",
-    "04_correlation_numeric": "Relationships among numeric fields inform feature scaling and redundancy.",
-    "05_outlier_boxplots": "IQR-based outlier scan highlights extreme values and informs handling policy.",
+    "01_class_balance": "About 1 in 5 flights is delayed. Because on-time flights dominate, a model that just guesses 'on time' every time would look 80% accurate — so we use a different measure of success that actually rewards catching real delays.",
+    "02_delay_rate_by_hour": "Morning flights are far less likely to be delayed than evening ones, with risk peaking near 7 PM at almost 30%. Delays accumulate across the day as aircraft and crews fall behind schedule.",
+    "03_delay_rate_by_carrier": "Some airlines are consistently more punctual than others — a gap of about 15 percentage points separates the best and worst performers. Airline identity turns out to be a meaningful predictor of delay risk.",
+    "04_correlation_numeric": "This shows how our numeric inputs relate to each other and to the delay outcome. We use this to make sure we're not feeding the model the same information twice, which could skew its estimates.",
+    "05_outlier_boxplots": "Every dataset has edge cases — unusually long routes, extreme weather days. This checks how common they are. We kept them in the model since they represent real situations travelers face.",
 }
 
 SPEAKER_OVERVIEW = """
@@ -463,36 +462,40 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, thre
         st.markdown(SPEAKER_DEMO)
 
 
+_FIGURE_TITLES: dict[str, str] = {
+    "01_class_balance": "How Often Do Delays Happen?",
+    "02_delay_rate_by_hour": "Delay Risk by Time of Day",
+    "03_delay_rate_by_carrier": "Delay Risk by Airline",
+    "04_correlation_numeric": "How Our Inputs Relate to Each Other",
+    "05_outlier_boxplots": "Checking for Unusual Values",
+}
+
+
 def tab_eda() -> None:
     st.markdown(
-        "Figures produced by `scripts/run_eda.py`. Commit `reports/figures/*.png` so **Streamlit Community Cloud** can display them."
+        "Key patterns we found in the data — what drives delays, who they affect, and how often they happen."
     )
     summary_path = REPORTS_DIR / "eda_summary.md"
     if summary_path.is_file():
-        with st.expander("EDA findings summary (rubric-aligned)", expanded=True):
+        with st.expander("Data findings summary", expanded=True):
             _render_eda_summary_markdown(summary_path.read_text(encoding="utf-8"))
-    else:
-        st.info(
-            "No EDA findings summary found yet. Run `python scripts/run_eda.py` to generate `reports/eda_summary.md`."
-        )
 
     st.divider()
     fig_dir = REPORTS_FIGURES
     if not fig_dir.is_dir():
-        st.info(f"No figures directory at `{fig_dir}` yet.")
         return
 
     paths = sorted(fig_dir.glob("*.png"))
     if not paths:
-        st.info(f"No `*.png` files in `{fig_dir}` yet.")
         return
 
     for path in paths:
         key = path.stem
-        title = key.replace("_", " ").title()
-        caption = EDA_CAPTIONS.get(key, "Discuss what pattern supports your modeling choices.")
+        title = _FIGURE_TITLES.get(key, key.replace("_", " ").title())
+        caption = EDA_CAPTIONS.get(key, "")
         st.subheader(title)
-        st.caption(caption)
+        if caption:
+            st.caption(caption)
         st.image(str(path), use_container_width=True)
         st.divider()
 
