@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Final
 
-# Values are on scales compatible with Meteostat-style daily fields used in training
-# (°C for temperatures, mm/day precipitation, km/h wind).
+# Values align with Meteostat-style daily fields used in training
+# (C for temperatures, mm/day precipitation, km/h wind).
 MANUAL_WEATHER_OPTIONS: Final[tuple[str, ...]] = (
     "Clear",
     "Cloudy",
@@ -34,12 +34,7 @@ def manual_weather_to_numeric_row(
     origin_keys: list[str],
     dest_keys: list[str],
 ) -> dict[str, float]:
-    """Build a flat dict of numeric weather columns present in the trained model.
-
-    **MANUAL FALLBACK — handled here:** categorical dropdowns are converted into plausible
-    daily numerics so the existing sklearn pipeline can consume them. This is **not** learned
-    from BTS; it is a **scenario** input for demos when forecasts are unavailable far in advance.
-    """
+    """Build numeric weather inputs from manual weather labels."""
     o_prof = _PROFILES.get(departure_condition, _PROFILES["Clear"])
     d_prof = _PROFILES.get(destination_condition, _PROFILES["Clear"])
     out: dict[str, float] = {}

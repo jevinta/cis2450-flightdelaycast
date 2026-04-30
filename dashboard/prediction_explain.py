@@ -19,15 +19,11 @@ class PredictionNarrative:
 
 
 def approximate_expected_delay_minutes(delay_probability: float) -> float | None:
-    """Heuristic minutes-late **projection** from P(delayed) — not from a trained regressor.
-
-    Returns ``None`` if you prefer to hide this in the UI; we return a bounded positive estimate
-    for display with an explicit disclaimer in the app.
-    """
+    """Return a bounded delay estimate from delay probability for UI display."""
     p = float(np.clip(delay_probability, 0.0, 1.0))
     if p <= 0.02:
         return None
-    # Soft mapping: higher P(delay) -> longer *conditional* lateness if delay occurs.
+    # Smooth mapping: higher P(delay) means higher expected delay if late.
     base = 15.0 + 95.0 * (p**1.15)
     return float(min(240.0, max(16.0, base)))
 
@@ -47,7 +43,7 @@ def _top_linear_factors(model: Pipeline, row: pd.DataFrame, k: int = 5) -> list[
     if sp_sparse.issparse(Xt):
         if Xt.shape[1] != coef.shape[0]:
             return None
-        # np.asarray(sparse) does not densify — must .toarray()/.A1 before ravel for real floats.
+        # np.asarray(sparse) does not densify, so convert explicitly before ravel().
         prod = Xt.multiply(coef)
         contrib = np.asarray(prod.toarray(), dtype=np.float64).ravel()
         names = prep.get_feature_names_out()

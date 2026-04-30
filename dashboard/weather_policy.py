@@ -25,7 +25,7 @@ class WeatherUIMode(str, Enum):
     MANUAL_SCENARIO = "manual"
 
 
-# Open-Meteo free tier covers 16 days ahead; cap at 7 ("a week or less") per project spec.
+# Open-Meteo supports longer horizons, but this app limits auto-forecast to 7 days.
 SUPPORTED_FORECAST_DAYS = 7
 
 
@@ -68,7 +68,7 @@ def _airport_latlon(iata: str) -> tuple[float, float] | None:
 def _open_meteo_daily(lat: float, lon: float, date_str: str) -> dict[str, float] | None:
     """Fetch one day of weather from Open-Meteo forecast API.
 
-    Maps API fields to Meteostat-compatible names used in training:
+    Map API fields to Meteostat-compatible names used in training:
       temperature_2m_max  → tmax (°C)
       temperature_2m_min  → tmin (°C)
       precipitation_sum   → prcp (mm)

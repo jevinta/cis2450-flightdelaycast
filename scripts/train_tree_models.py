@@ -27,9 +27,7 @@ from sklearn.preprocessing import OneHotEncoder, RobustScaler
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
 from flightdelaycast.model_features import drop_highly_correlated_numeric, feature_columns  # noqa: E402
 
-# Parameter spaces for RandomizedSearchCV (on by default; use --no-tune to skip).
-# n_estimators, depth, leaf size, and feature-split strategy cover the main
-# bias-variance knobs for RF; learning rate, depth, and regularisation for HGB.
+# Parameter spaces used by RandomizedSearchCV.
 RF_PARAM_DIST = {
     "clf__n_estimators": [100, 200, 300],
     "clf__max_depth": [10, 15, 20, 24],
@@ -47,9 +45,8 @@ HGB_PARAM_DIST = {
 
 
 def _preprocess(num_cols: list[str], cat_cols: list[str]) -> ColumnTransformer:
-    # Dense OHE: HistGradientBoostingClassifier does not accept sparse X.
-    # RandomForest works with dense as well.
-    # RobustScaler tolerates heavy-tailed numerics (distance, weather) vs. plain z-score scaling.
+    # Keep OHE dense so both RF and HGB consume the same matrix shape.
+    # RobustScaler handles long-tailed numeric distributions well.
     transformers: list = []
     if num_cols:
         transformers.append(
@@ -100,11 +97,7 @@ def _save_importances(pipe: Pipeline, out: Path, top_n: int = 25) -> None:
 
 
 def _col_importances(prep, clf, num_cols: list[str], cat_cols: list[str]) -> dict[str, float]:
-    """Aggregate post-OHE feature importances back to each original column name.
-
-    ColumnTransformer names features as "num__<col>" and "cat__<col>_<value>".
-    Summing across OHE dummies gives each original column a single importance score.
-    """
+    """Aggregate encoded feature importances back to original column names."""
     names = prep.get_feature_names_out()
     imp = np.asarray(clf.feature_importances_, dtype=float)
     col_imp: dict[str, float] = {}
@@ -114,7 +107,7 @@ def _col_importances(prep, clf, num_cols: list[str], cat_cols: list[str]) -> dic
             orig = feat_name[5:]
         elif feat_name.startswith("cat__"):
             remainder = feat_name[5:]
-            # Match the longest column name that is a prefix (handles underscores in names).
+            # Use the longest prefix match to handle underscores in names.
             for c in sorted(cat_cols, key=len, reverse=True):
                 if remainder.startswith(c + "_") or remainder == c:
                     orig = c
@@ -136,12 +129,7 @@ def _feature_selection_comparison(
     top_k: int = 6,
     seed: int = 42,
 ) -> dict:
-    """Select top-k original features by aggregated RF importance; retrain and compare.
-
-    This demonstrates that feature importance scores are actionable: the model
-    retrained on the reduced feature set should preserve most predictive power,
-    validating that low-importance features contribute marginally.
-    """
+    """Select top-k original features by RF importance, then retrain and compare."""
     clf = pipe.named_steps["clf"]
     prep = pipe.named_steps["prep"]
     col_imp = _col_importances(prep, clf, num_cols, cat_cols)
@@ -190,11 +178,7 @@ def _tune_pipe(
     cv: int = 3,
     seed: int = 42,
 ) -> tuple[Pipeline, dict]:
-    """Run RandomizedSearchCV; return (best_estimator, best_clf_params).
-
-    Scoring on F1 rather than accuracy because the target is imbalanced (~23 % delayed).
-    Cross-validation prevents the chosen params from overfitting to the single train split.
-    """
+    """Run RandomizedSearchCV and return best estimator plus classifier params."""
     search = RandomizedSearchCV(
         pipe,
         param_distributions=param_dist,
@@ -207,7 +191,7 @@ def _tune_pipe(
         refit=True,
     )
     search.fit(X_train, y_train)
-    # Strip "clf__" prefix so the saved JSON maps cleanly to classifier kwargs.
+    # Strip "clf__" so saved params map directly to classifier kwargs.
     best_params = {k.replace("clf__", ""): v for k, v in search.best_params_.items()}
     return search.best_estimator_, best_params
 
@@ -221,11 +205,7 @@ def _find_optimal_threshold(
     hi: float = 0.70,
     steps: int = 51,
 ) -> tuple[float, dict]:
-    """Scan decision thresholds on a held-out validation set; return (best_threshold, metrics_at_threshold).
-
-    Using a validation split (not the test set) avoids leaking the chosen threshold
-    into the reported test metrics — the test set stays untouched as a clean holdout.
-    """
+    """Scan validation thresholds and return the best one with metrics."""
     probas = pipe.predict_proba(X_val)[:, 1]
     best_thr, best_f1 = 0.5, 0.0
     for thr in np.linspace(lo, hi, steps):
@@ -321,9 +301,7 @@ def _train_hgb(
     best_params = None
     if tune:
         print("Running RandomizedSearchCV for Histogram Gradient Boosting …")
-        # Disable early stopping during search: CV folds already provide the
-        # hold-out estimate, and early_stopping + validation_fraction conflicts
-        # with how RandomizedSearchCV splits data internally.
+        # Disable early stopping during search since CV already handles validation.
         pipe.named_steps["clf"].set_params(early_stopping=False, validation_fraction=None)
         pipe, best_params = _tune_pipe(pipe, HGB_PARAM_DIST, X_train, y_train, n_iter=n_iter, seed=seed)
         print(f"HGB best params: {best_params}")
@@ -436,7 +414,7 @@ def main() -> None:
             out_params.write_text(json.dumps(best_params, indent=2))
             print(f"Saved tuning results → {out_params.name}")
 
-        # Always run feature-importance-based selection to show which features matter.
+        # Always run feature-importance-based feature selection.
         print(f"Running feature importance selection (top {args.top_k} original features) …")
         sel = _feature_selection_comparison(
             pipe, X_train, X_test, y_train, y_test, num_cols, cat_cols,
