@@ -114,6 +114,8 @@ def clean_flights(df: pd.DataFrame) -> pd.DataFrame:
     out["is_delayed"] = out["is_delayed"].astype(int)
 
     out["dep_hour"] = parse_crs_dep_time(out["CRS_DEP_TIME"])
+    out["dep_hour_sin"] = np.sin(2 * np.pi * out["dep_hour"] / 24)
+    out["dep_hour_cos"] = np.cos(2 * np.pi * out["dep_hour"] / 24)
     out["month"] = out["FL_DATE"].dt.month
     out["day_of_week"] = out["FL_DATE"].dt.dayofweek
     for col in ("OP_CARRIER", "ORIGIN", "DEST"):

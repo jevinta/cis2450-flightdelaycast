@@ -1,6 +1,7 @@
 # Core
 pandas>=2.0,<3
 numpy>=1.24,<3
+polars>=1.0,<2
 
 # Viz & EDA
 matplotlib>=3.7,<4

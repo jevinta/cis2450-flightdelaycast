@@ -30,7 +30,7 @@ python scripts/build_processed.py
 python scripts/build_processed.py --weather --weather-dest --weather-max-pairs 500
 ```
 
-4. Train models:
+4. Train models (both scripts run **RandomizedSearchCV** on F1 by default; add `--no-tune` for a faster run without hyperparameter search):
 
 ```bash
 python scripts/train_baseline.py
@@ -45,7 +45,7 @@ Your UI is **Streamlit** (`dashboard/app.py`). Typical flow:
 2. **Include model artifacts** for the live demo (or the app falls back to instructions only):
    - `models/baseline_logistic.joblib`
    - `models/baseline_features.json` (generated with `scripts/train_baseline.py`)
-   - Optional: `models/baseline_metrics.json` for on-screen scores
+   - Optional: `models/baseline_metrics.json`, `models/baseline_best_params.json` (tuning output)
 3. **Include EDA images** if you want the second tab to show charts: commit `reports/figures/*.png` (they are not gitignored).
 4. **[Streamlit Community Cloud](https://streamlit.io/cloud)** (free): sign in with GitHub → New app → pick repo → **Main file** `dashboard/app.py` → **Advanced** → Python version 3.10+ → **Requirements file** `requirements-app.txt` (slimmer than full dev `requirements.txt`).
 5. Wait for the build; share the public URL for your presentation.
