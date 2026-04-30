@@ -4,6 +4,8 @@
     "month",
     "day_of_week",
     "DISTANCE",
+    "dep_hour_sin",
+    "dep_hour_cos",
     "w_tmax",
     "w_tmin",
     "w_prcp",

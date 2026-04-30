@@ -212,6 +212,37 @@ def _tune_pipe(
     return search.best_estimator_, best_params
 
 
+def _find_optimal_threshold(
+    pipe: Pipeline,
+    X_val,
+    y_val,
+    *,
+    lo: float = 0.20,
+    hi: float = 0.70,
+    steps: int = 51,
+) -> tuple[float, dict]:
+    """Scan decision thresholds on a held-out validation set; return (best_threshold, metrics_at_threshold).
+
+    Using a validation split (not the test set) avoids leaking the chosen threshold
+    into the reported test metrics — the test set stays untouched as a clean holdout.
+    """
+    probas = pipe.predict_proba(X_val)[:, 1]
+    best_thr, best_f1 = 0.5, 0.0
+    for thr in np.linspace(lo, hi, steps):
+        pred_thr = (probas >= thr).astype(int)
+        f = float(f1_score(y_val, pred_thr, zero_division=0))
+        if f > best_f1:
+            best_f1, best_thr = f, float(thr)
+    pred_best = (probas >= best_thr).astype(int)
+    return best_thr, {
+        "threshold": round(best_thr, 4),
+        "f1": round(float(f1_score(y_val, pred_best, zero_division=0)), 4),
+        "precision": round(float(precision_score(y_val, pred_best, zero_division=0)), 4),
+        "recall": round(float(recall_score(y_val, pred_best, zero_division=0)), 4),
+        "accuracy": round(float(accuracy_score(y_val, pred_best)), 4),
+    }
+
+
 def _train_rf(
     X_train,
     X_test,
@@ -223,7 +254,7 @@ def _train_rf(
     *,
     tune: bool = False,
     n_iter: int = 12,
-) -> tuple[Pipeline, dict, np.ndarray, dict | None]:
+) -> tuple[Pipeline, dict, np.ndarray, dict | None, float]:
     pipe = Pipeline(steps=[
         ("prep", _preprocess(num_cols, cat_cols)),
         ("clf", RandomForestClassifier(
@@ -244,7 +275,19 @@ def _train_rf(
         pipe.fit(X_train, y_train)
     pred = pipe.predict(X_test)
     metrics = _metrics(y_test, pred, n_train=len(X_train), n_test=len(X_test))
-    return pipe, metrics, pred, best_params
+
+    X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
+    print("Threshold tuning for Random Forest on validation split …")
+    best_thr, thr_val_metrics = _find_optimal_threshold(pipe, X_val, y_val)
+    probas_test = pipe.predict_proba(X_test)[:, 1]
+    pred_tuned = (probas_test >= best_thr).astype(int)
+    metrics["tuned_threshold"] = round(best_thr, 4)
+    metrics["tuned_f1"] = round(float(f1_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_precision"] = round(float(precision_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_recall"] = round(float(recall_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_accuracy"] = round(float(accuracy_score(y_test, pred_tuned)), 4)
+    print(f"RF optimal threshold={best_thr:.3f}  val_F1={thr_val_metrics['f1']:.3f}  test_F1={metrics['tuned_f1']:.3f} (default test_F1={metrics['f1']:.3f})")
+    return pipe, metrics, pred, best_params, best_thr
 
 
 def _train_hgb(
@@ -258,7 +301,7 @@ def _train_hgb(
     *,
     tune: bool = False,
     n_iter: int = 12,
-) -> tuple[Pipeline, dict, np.ndarray, dict | None]:
+) -> tuple[Pipeline, dict, np.ndarray, dict | None, float]:
     pipe = Pipeline(steps=[
         ("prep", _preprocess(num_cols, cat_cols)),
         ("clf", HistGradientBoostingClassifier(
@@ -288,7 +331,19 @@ def _train_hgb(
         pipe.fit(X_train, y_train)
     pred = pipe.predict(X_test)
     metrics = _metrics(y_test, pred, n_train=len(X_train), n_test=len(X_test))
-    return pipe, metrics, pred, best_params
+
+    X_tr, X_val, y_tr, y_val = train_test_split(X_train, y_train, test_size=0.15, random_state=seed, stratify=y_train)
+    print("Threshold tuning for Histogram Gradient Boosting on validation split …")
+    best_thr, thr_val_metrics = _find_optimal_threshold(pipe, X_val, y_val)
+    probas_test = pipe.predict_proba(X_test)[:, 1]
+    pred_tuned = (probas_test >= best_thr).astype(int)
+    metrics["tuned_threshold"] = round(best_thr, 4)
+    metrics["tuned_f1"] = round(float(f1_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_precision"] = round(float(precision_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_recall"] = round(float(recall_score(y_test, pred_tuned, zero_division=0)), 4)
+    metrics["tuned_accuracy"] = round(float(accuracy_score(y_test, pred_tuned)), 4)
+    print(f"HGB optimal threshold={best_thr:.3f}  val_F1={thr_val_metrics['f1']:.3f}  test_F1={metrics['tuned_f1']:.3f} (default test_F1={metrics['f1']:.3f})")
+    return pipe, metrics, pred, best_params, best_thr
 
 
 def main() -> None:
@@ -348,7 +403,7 @@ def main() -> None:
     results: dict[str, dict] = {}
 
     if args.model in ("rf", "both"):
-        pipe, metrics, pred, best_params = _train_rf(
+        pipe, metrics, pred, best_params, rf_threshold = _train_rf(
             X_train,
             X_test,
             y_train,
@@ -371,6 +426,10 @@ def main() -> None:
         stem.with_name("random_forest_metrics.json").write_text(json.dumps(metrics, indent=2))
         stem.with_name("random_forest_features.json").write_text(json.dumps(feat_meta, indent=2))
         _save_importances(pipe, stem.with_name("random_forest_importances.json"))
+        stem.with_name("random_forest_threshold.json").write_text(
+            json.dumps({"threshold": round(rf_threshold, 4)}, indent=2)
+        )
+        print(f"Saved RF threshold → random_forest_threshold.json ({rf_threshold:.4f})")
 
         if best_params is not None:
             out_params = stem.with_name("random_forest_best_params.json")
@@ -396,7 +455,7 @@ def main() -> None:
         print(classification_report(y_test, pred, digits=3))
 
     if args.model in ("hgb", "both"):
-        pipe, metrics, pred, best_params = _train_hgb(
+        pipe, metrics, pred, best_params, hgb_threshold = _train_hgb(
             X_train,
             X_test,
             y_train,
@@ -419,6 +478,10 @@ def main() -> None:
         stem.with_name("hist_gradient_boosting_metrics.json").write_text(json.dumps(metrics, indent=2))
         stem.with_name("hist_gradient_boosting_features.json").write_text(json.dumps(feat_meta, indent=2))
         _save_importances(pipe, stem.with_name("hist_gradient_boosting_importances.json"))
+        stem.with_name("hist_gradient_boosting_threshold.json").write_text(
+            json.dumps({"threshold": round(hgb_threshold, 4)}, indent=2)
+        )
+        print(f"Saved HGB threshold → hist_gradient_boosting_threshold.json ({hgb_threshold:.4f})")
 
         if best_params is not None:
             out_params = stem.with_name("hist_gradient_boosting_best_params.json")

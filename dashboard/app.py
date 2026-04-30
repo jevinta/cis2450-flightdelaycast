@@ -48,6 +48,7 @@ MODEL_BUNDLES: list[dict[str, str | Path]] = [
         "joblib": MODELS_DIR / "random_forest.joblib",
         "features": MODELS_DIR / "random_forest_features.json",
         "metrics": MODELS_DIR / "random_forest_metrics.json",
+        "threshold": MODELS_DIR / "random_forest_threshold.json",
     },
     {
         "id": "hgb",
@@ -55,6 +56,7 @@ MODEL_BUNDLES: list[dict[str, str | Path]] = [
         "joblib": MODELS_DIR / "hist_gradient_boosting.joblib",
         "features": MODELS_DIR / "hist_gradient_boosting_features.json",
         "metrics": MODELS_DIR / "hist_gradient_boosting_metrics.json",
+        "threshold": MODELS_DIR / "hist_gradient_boosting_threshold.json",
     },
 ]
 
@@ -192,18 +194,20 @@ def _render_eda_summary_markdown(md_text: str) -> None:
 def load_trained_bundle(model_id: str):
     bundle = next(b for b in MODEL_BUNDLES if b["id"] == model_id)
     if not _bundle_files_ready(bundle):
-        return None, None, None, str(bundle["label"])
+        return None, None, None, str(bundle["label"]), 0.5
     model = joblib.load(bundle["joblib"])
     features = json.loads(Path(bundle["features"]).read_text())
     mp = Path(bundle["metrics"])
     metrics = json.loads(mp.read_text()) if mp.is_file() else {}
-    return model, features, metrics, str(bundle["label"])
+    tp = bundle.get("threshold")
+    threshold = json.loads(Path(tp).read_text()).get("threshold", 0.5) if tp and Path(tp).is_file() else 0.5
+    return model, features, metrics, str(bundle["label"]), threshold
 
 
-def _risk_tone(p: float) -> tuple[str, str]:
-    if p >= 0.55:
+def _risk_tone(p: float, *, threshold: float = 0.5) -> tuple[str, str]:
+    if p >= threshold * 1.1:
         return "High delay risk", "🔴"
-    if p >= 0.35:
+    if p >= threshold * 0.7:
         return "Moderate delay risk", "🟡"
     return "Lower delay risk", "🟢"
 
@@ -791,7 +795,7 @@ def tab_overview() -> None:
     st.caption("Tip for your talk: keep this tab visible while you introduce the problem, then switch to **Delay risk demo** for the live walkthrough.")
 
 
-def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> None:
+def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str, threshold: float = 0.5) -> None:
     if model is None or feat_meta is None:
         if model_id == "rf":
             st.warning(
@@ -953,7 +957,7 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
         weather=weather_vals,
     )
     proba = float(model.predict_proba(row)[0, 1])
-    label, emoji = _risk_tone(proba)
+    label, emoji = _risk_tone(proba, threshold=threshold)
     approx_min = approximate_expected_delay_minutes(proba)
     narrative = build_narrative(
         model,
@@ -1307,12 +1311,12 @@ def main() -> None:
 
     tab_ov, tab_live, tab_plots, tab_meth = st.tabs(["Overview", "Delay risk demo", "EDA snapshots", "Methods"])
 
-    model, feat_meta, metrics, label = load_trained_bundle(chosen_id)
+    model, feat_meta, metrics, label, threshold = load_trained_bundle(chosen_id)
 
     with tab_ov:
         tab_overview()
     with tab_live:
-        tab_demo(model, feat_meta, metrics, label, model_id=chosen_id)
+        tab_demo(model, feat_meta, metrics, label, model_id=chosen_id, threshold=threshold)
     with tab_plots:
         tab_eda()
     with tab_meth:

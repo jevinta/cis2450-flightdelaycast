@@ -26,6 +26,9 @@ def drop_highly_correlated_numeric(
 
 def feature_columns(df: pd.DataFrame) -> tuple[list[str], list[str]]:
     numeric = ["dep_hour", "month", "day_of_week", "DISTANCE"]
+    for c in ("dep_hour_sin", "dep_hour_cos"):
+        if c in df.columns:
+            numeric.append(c)
     for c in WEATHER_ORIGIN_NUMERIC + WEATHER_DEST_NUMERIC:
         if c in df.columns and df[c].notna().any():
             numeric.append(c)
@@ -50,6 +53,8 @@ def prediction_dataframe(
 
     base = {
         "dep_hour": float(dep_hour),
+        "dep_hour_sin": float(np.sin(2 * np.pi * dep_hour / 24)),
+        "dep_hour_cos": float(np.cos(2 * np.pi * dep_hour / 24)),
         "month": int(month),
         "day_of_week": int(day_of_week),
         "DISTANCE": float(distance),
