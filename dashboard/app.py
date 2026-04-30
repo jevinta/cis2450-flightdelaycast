@@ -211,13 +211,6 @@ def tab_demo(model, feat_meta, metrics, model_label: str, *, model_id: str) -> N
         return
 
     st.success(f"Loaded **{model_label}** pipeline.")
-    if metrics:
-        m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Holdout F1", f"{metrics.get('f1', 0):.3f}" if isinstance(metrics.get("f1"), (int, float)) else metrics.get("f1", "n/a"))
-        m2.metric("Accuracy", f"{metrics.get('accuracy', 0):.3f}" if isinstance(metrics.get("accuracy"), (int, float)) else metrics.get("accuracy", "n/a"))
-        m3.metric("Precision", f"{metrics.get('precision', 0):.3f}" if isinstance(metrics.get("precision"), (int, float)) else metrics.get("precision", "n/a"))
-        m4.metric("Recall", f"{metrics.get('recall', 0):.3f}" if isinstance(metrics.get("recall"), (int, float)) else metrics.get("recall", "n/a"))
-        st.caption(f"Test-set delay rate (positives): **{metrics.get('delay_rate_test', 'n/a')}**")
 
     num_cols = feat_meta["numeric"]
     cat_cols = feat_meta["categorical"]
