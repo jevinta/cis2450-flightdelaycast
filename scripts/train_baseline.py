@@ -25,26 +25,12 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
-from flightdelaycast.model_features import feature_columns  # noqa: E402
+from flightdelaycast.model_features import drop_highly_correlated_numeric, feature_columns  # noqa: E402
 
 # Regularization strength C for saga + sparse OHE; search log-scale (imbalanced F1 objective).
 LOGISTIC_PARAM_DIST = {
     "clf__C": loguniform(1e-4, 1e2),
 }
-
-
-def _drop_highly_correlated_numeric(
-    df: pd.DataFrame, numeric_cols: list[str], threshold: float = 0.9
-) -> tuple[list[str], list[str]]:
-    """Drop redundant numeric columns using correlation on **training rows only** (no test leakage)."""
-    usable = [c for c in numeric_cols if c in df.columns]
-    if len(usable) < 2:
-        return usable, []
-    corr = df[usable].corr(numeric_only=True).abs()
-    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
-    to_drop = [col for col in upper.columns if (upper[col] > threshold).any()]
-    keep = [c for c in usable if c not in to_drop]
-    return keep, to_drop
 
 
 def _tune_logistic(
@@ -111,7 +97,7 @@ def main() -> None:
         X, y, test_size=args.test_size, random_state=args.seed, stratify=y
     )
 
-    num_cols, dropped_corr = _drop_highly_correlated_numeric(X_train, num_cols, threshold=0.9)
+    num_cols, dropped_corr = drop_highly_correlated_numeric(X_train, num_cols, threshold=0.9)
     use_cols_fit = num_cols + cat_cols
     X_train = X_train[use_cols_fit]
     X_test = X_test[use_cols_fit]

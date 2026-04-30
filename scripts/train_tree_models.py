@@ -25,7 +25,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, RobustScaler
 
 from flightdelaycast.config import MODELS_DIR, PROCESSED_FLIGHTS  # noqa: E402
-from flightdelaycast.model_features import feature_columns  # noqa: E402
+from flightdelaycast.model_features import drop_highly_correlated_numeric, feature_columns  # noqa: E402
 
 # Parameter spaces for RandomizedSearchCV (on by default; use --no-tune to skip).
 # n_estimators, depth, leaf size, and feature-split strategy cover the main
@@ -44,20 +44,6 @@ HGB_PARAM_DIST = {
     "clf__l2_regularization": [0.0, 0.1, 0.5],
     "clf__min_samples_leaf": [10, 20, 30],
 }
-
-
-def _drop_highly_correlated_numeric(
-    df: pd.DataFrame, numeric_cols: list[str], threshold: float = 0.9
-) -> tuple[list[str], list[str]]:
-    """Correlation matrix is computed on ``df`` only — pass training features after split to avoid leakage."""
-    usable = [c for c in numeric_cols if c in df.columns]
-    if len(usable) < 2:
-        return usable, []
-    corr = df[usable].corr(numeric_only=True).abs()
-    upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
-    to_drop = [col for col in upper.columns if (upper[col] > threshold).any()]
-    keep = [c for c in usable if c not in to_drop]
-    return keep, to_drop
 
 
 def _preprocess(num_cols: list[str], cat_cols: list[str]) -> ColumnTransformer:
@@ -350,7 +336,7 @@ def main() -> None:
         X, y, test_size=args.test_size, random_state=args.seed, stratify=y
     )
 
-    num_cols, dropped_corr = _drop_highly_correlated_numeric(X_train, num_cols, threshold=0.9)
+    num_cols, dropped_corr = drop_highly_correlated_numeric(X_train, num_cols, threshold=0.9)
     use_cols_fit = num_cols + cat_cols
     X_train = X_train[use_cols_fit]
     X_test = X_test[use_cols_fit]
